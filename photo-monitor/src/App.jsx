@@ -478,14 +478,16 @@ function App() {
   const [booting, setBooting] = useState(true)
   const [authError, setAuthError] = useState("")
   const [photos, setPhotos] = useState([])
+  const [photoCursor, setPhotoCursor] = useState(null)
+  const [photoTotal, setPhotoTotal] = useState(0)
   const [station, setStation] = useState(DEFAULT_STATION)
   const [photoLimit, setPhotoLimit] = useState(readInitialPhotoLimit)
-  const [visiblePhotoCount, setVisiblePhotoCount] = useState(getPhotoFeedBatchSize)
   const [dedupeEnabled, setDedupeEnabled] = useState(readInitialDedupeEnabled)
   const [dedupeWindowSeconds, setDedupeWindowSeconds] = useState(readInitialDedupeWindow)
   const [selectedDepartment, setSelectedDepartment] = useState("")
   const [selectedPhoto, setSelectedPhoto] = useState(null)
   const [loadingPhotos, setLoadingPhotos] = useState(false)
+  const [loadingMorePhotos, setLoadingMorePhotos] = useState(false)
   const [photoError, setPhotoError] = useState("")
   const [employees, setEmployees] = useState([])
   const [departments, setDepartments] = useState([])
@@ -504,12 +506,17 @@ function App() {
     parsePositiveInteger(DEFAULT_DEDUPE_WINDOW_SECONDS)
   const filteredPhotos = dedupeEnabled ? dedupePhotosByWindow(photos, parsedDedupeWindow) : photos
   const limitedPhotos = parsedPhotoLimit ? filteredPhotos.slice(0, parsedPhotoLimit) : filteredPhotos
-  const displayedPhotos = limitedPhotos.slice(0, visiblePhotoCount)
-  const hasMorePhotos = displayedPhotos.length < limitedPhotos.length
+  const displayedPhotos = limitedPhotos
+  const hasMorePhotos = photoCursor != null && (!parsedPhotoLimit || photos.length < parsedPhotoLimit)
   const accessibleModules = MODULES.filter((module) => hasPermission(user, module.permission))
 
-  const loadMorePhotos = () => {
-    setVisiblePhotoCount((current) => Math.min(current + getPhotoFeedBatchSize(), limitedPhotos.length))
+  const getNextPhotoPageSize = () => {
+    const batchSize = getPhotoFeedBatchSize()
+    if (!parsedPhotoLimit) {
+      return batchSize
+    }
+
+    return Math.max(Math.min(batchSize, parsedPhotoLimit - photos.length), 0)
   }
 
   const showBanner = (message) => {
@@ -543,19 +550,32 @@ function App() {
   const loadPhotos = async (nextStation = station, nextDepartment = selectedDepartment) => {
     if (!hasPhotoAccess) {
       setPhotos([])
+      setPhotoCursor(null)
+      setPhotoTotal(0)
       setPhotoError("")
       setLoadingPhotos(false)
       return
     }
 
     setLoadingPhotos(true)
+    setLoadingMorePhotos(false)
     setPhotoError("")
 
     try {
-      const data = await fetchPhotos(nextStation, nextDepartment)
-      setPhotos(data)
+      const initialLimit = parsedPhotoLimit
+        ? Math.min(getPhotoFeedBatchSize(), parsedPhotoLimit)
+        : getPhotoFeedBatchSize()
+      const data = await fetchPhotos(nextStation, nextDepartment, {
+        limit: initialLimit,
+        cursor: 0,
+      })
+      setPhotos(data.items ?? data)
+      setPhotoCursor(data.next_cursor ?? null)
+      setPhotoTotal(data.total ?? data.length ?? 0)
     } catch (error) {
       setPhotos([])
+      setPhotoCursor(null)
+      setPhotoTotal(0)
       setPhotoError(error.message)
       if (error.status === 401) {
         setStoredToken("")
@@ -563,6 +583,38 @@ function App() {
       }
     } finally {
       setLoadingPhotos(false)
+    }
+  }
+
+  const loadMorePhotos = async () => {
+    if (!hasMorePhotos || loadingPhotos || loadingMorePhotos) {
+      return
+    }
+
+    const pageSize = getNextPhotoPageSize()
+    if (!pageSize) {
+      return
+    }
+
+    setLoadingMorePhotos(true)
+    setPhotoError("")
+
+    try {
+      const data = await fetchPhotos(station, selectedDepartment, {
+        limit: pageSize,
+        cursor: photoCursor,
+      })
+      setPhotos((current) => [...current, ...(data.items ?? data)])
+      setPhotoCursor(data.next_cursor ?? null)
+      setPhotoTotal(data.total ?? photoTotal)
+    } catch (error) {
+      setPhotoError(error.message)
+      if (error.status === 401) {
+        setStoredToken("")
+        setUser(null)
+      }
+    } finally {
+      setLoadingMorePhotos(false)
     }
   }
 
@@ -595,12 +647,10 @@ function App() {
   }, [dedupeWindowSeconds])
 
   useEffect(() => {
-    setVisiblePhotoCount(getPhotoFeedBatchSize())
-  }, [photos, station, selectedDepartment, dedupeEnabled, dedupeWindowSeconds, photoLimit])
-
-  useEffect(() => {
     if (!user) {
       setPhotos([])
+      setPhotoCursor(null)
+      setPhotoTotal(0)
       setEmployees([])
       setDepartments([])
       setSelectedDepartment("")
@@ -614,6 +664,8 @@ function App() {
 
     if (!hasPhotoAccess) {
       setPhotos([])
+      setPhotoCursor(null)
+      setPhotoTotal(0)
       setPhotoError("")
       setSelectedPhoto(null)
       return
@@ -706,6 +758,8 @@ function App() {
     setStation(DEFAULT_STATION)
     setSelectedDepartment("")
     setPhotos([])
+    setPhotoCursor(null)
+    setPhotoTotal(0)
     setSelectedPhoto(null)
     setAuthError("")
   }
@@ -716,6 +770,8 @@ function App() {
     wsRef.current = null
     setUser(null)
     setPhotos([])
+    setPhotoCursor(null)
+    setPhotoTotal(0)
     setSelectedDepartment("")
     setSelectedPhoto(null)
     setPasswordModalOpen(false)
@@ -926,11 +982,11 @@ function App() {
           {!photoError ? (
             <PhotoGrid
               photos={displayedPhotos}
-              loading={loadingPhotos}
+              loading={loadingPhotos || loadingMorePhotos}
               station={station}
               displayCount={displayedPhotos.length}
-              totalCount={limitedPhotos.length}
-              originalCount={photos.length}
+              totalCount={parsedPhotoLimit ? Math.min(photoTotal, parsedPhotoLimit) : photoTotal}
+              originalCount={photoTotal}
               hasMore={hasMorePhotos}
               onLoadMore={loadMorePhotos}
               onClickPhoto={(photo) => setSelectedPhoto(photo)}

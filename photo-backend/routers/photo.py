@@ -26,19 +26,34 @@ def _get_accessible_departments(user: dict) -> list[str]:
 
 
 @router.get("/photos")
-def get_photos(station: str, department: str | None = None, user=Depends(require_camera_access)):
+def get_photos(
+    station: str,
+    department: str | None = None,
+    limit: int = 24,
+    cursor: int = 0,
+    user=Depends(require_camera_access),
+):
     normalized_department = (department or "").strip()
     accessible_departments = _get_accessible_departments(user)
+    normalized_limit = min(max(limit, 1), 100)
+    normalized_cursor = max(cursor, 0)
 
     if normalized_department and user["role"] != "admin" and normalized_department not in accessible_departments:
-        raise HTTPException(status_code=403, detail="当前账号没有该部门的查看权限")
+        raise HTTPException(status_code=403, detail="No permission to view this department")
 
-    return get_all_photos(
+    photos = get_all_photos(
         BASE,
         station,
         department=normalized_department or None,
         allowed_departments=None if user["role"] == "admin" else accessible_departments,
     )
+    next_cursor = normalized_cursor + normalized_limit
+
+    return {
+        "items": photos[normalized_cursor:next_cursor],
+        "next_cursor": next_cursor if next_cursor < len(photos) else None,
+        "total": len(photos),
+    }
 
 
 @router.get("/thumbnails/{file_path:path}")

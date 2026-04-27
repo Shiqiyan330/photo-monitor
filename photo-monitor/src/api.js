@@ -86,10 +86,16 @@ export function changePassword(oldPassword, newPassword) {
   })
 }
 
-export function fetchPhotos(station, department = "") {
+export function fetchPhotos(station, department = "", options = {}) {
   const params = new URLSearchParams({ station })
   if (department) {
     params.set("department", department)
+  }
+  if (options.limit) {
+    params.set("limit", String(options.limit))
+  }
+  if (options.cursor != null) {
+    params.set("cursor", String(options.cursor))
   }
   return request(`/photos?${params.toString()}`)
 }
