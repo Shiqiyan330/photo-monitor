@@ -1,0 +1,112 @@
+[
+  {
+    "username": "admin",
+    "password": "admin",
+    "role": "admin",
+    "phone": "",
+    "name": "系统管理员",
+    "age": 0,
+    "department": "",
+    "position": "",
+    "rank": "",
+    "avatar": "👨‍💼",
+    "join_date": "2026-04-22 10:27:53",
+    "permissions": [
+      "camera",
+      "files",
+      "study",
+      "upload"
+    ]
+  },
+  {
+    "username": "1",
+    "password": "1",
+    "role": "employee",
+    "phone": "15167213301",
+    "name": "测试",
+    "age": 0,
+    "department": "",
+    "position": "",
+    "rank": "",
+    "avatar": "👤",
+    "join_date": "2026-04-22 10:29:28",
+    "permissions": [
+      "camera",
+      "files",
+      "study",
+      "upload",
+      "structure",
+      "cross_dept_files",
+      "dept_牛头山",
+      "dept_雪峰山",
+      "dept_大茅山",
+      "dept_浙江之心",
+      "dept_总公司"
+    ]
+  },
+  {
+    "username": "15079330497",
+    "password": "15079330497",
+    "role": "employee",
+    "phone": "15079330497",
+    "name": "曹镜泉",
+    "age": 0,
+    "department": "浙江之心",
+    "position": "项目负责人",
+    "rank": "",
+    "avatar": "👤",
+    "join_date": "2026-04-22 11:06:10",
+    "permissions": [
+      "camera",
+      "files",
+      "study",
+      "upload",
+      "structure",
+      "cross_dept_files",
+      "dept_大茅山",
+      "dept_牛头山",
+      "dept_浙江之心",
+      "dept_雪峰山",
+      "dept_总公司"
+    ]
+  },
+  {
+    "username": "17503850285",
+    "password": "17503850285",
+    "role": "employee",
+    "phone": "17503850285",
+    "name": "李耀耀",
+    "age": 0,
+    "department": "总公司",
+    "position": "项目负责人",
+    "rank": "",
+    "avatar": "👤",
+    "join_date": "2026-04-22 11:06:54",
+    "permissions": [
+      "camera",
+      "files",
+      "study",
+      "upload"
+    ]
+  },
+  {
+    "username": "15869026351",
+    "password": "15869026351",
+    "role": "employee",
+    "phone": "15869026351",
+    "name": "黄航舰",
+    "age": 0,
+    "department": "总公司",
+    "position": "总经理",
+    "rank": "",
+    "avatar": "👤",
+    "join_date": "2026-04-22 11:07:49",
+    "permissions": [
+      "camera",
+      "files",
+      "study",
+      "upload",
+      "structure"
+    ]
+  }
+]

@@ -1,0 +1,11 @@
+services:
+  photo-backend:
+    build:
+      context: ./photo-backend
+    container_name: photo-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./photo-backend/photos:/app/photos
+      - ./photo-backend/users.json:/app/users.json
+    restart: unless-stopped
