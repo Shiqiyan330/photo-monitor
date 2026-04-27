@@ -3,9 +3,19 @@ services:
     build:
       context: ./photo-backend
     container_name: photo-backend
-    ports:
-      - "127.0.0.1:8000:8000"
+    expose:
+      - "8000"
     volumes:
       - ./photo-backend/photos:/app/photos
       - ./photo-backend/users.json:/app/users.json
+    restart: unless-stopped
+
+  photo-frontend:
+    build:
+      context: ./photo-monitor
+    container_name: photo-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      - photo-backend
     restart: unless-stopped

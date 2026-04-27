@@ -28,7 +28,7 @@ export default function PhotoGrid({
         {photos.map((photo, index) => (
           <article key={`${photo.url}-${index}`} className="photo-card">
             <img
-              src={getAssetUrl(photo.url.replace("http://127.0.0.1:8000", ""))}
+              src={getAssetUrl(photo.url)}
               alt={photo.name}
               className="photo-thumb"
               onClick={() => onClickPhoto(photo)}

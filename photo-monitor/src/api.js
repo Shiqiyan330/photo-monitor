@@ -1,4 +1,4 @@
-const BASE_URL = "http://127.0.0.1:8000"
+const BASE_URL = ""
 const TOKEN_KEY = "photo_monitor_token"
 
 export function getStoredToken() {
@@ -37,12 +37,22 @@ async function request(path, options = {}) {
 }
 
 export function getAssetUrl(path) {
-  return `${BASE_URL}${path}`
+  if (!path) {
+    return ""
+  }
+
+  if (path.startsWith("http://") || path.startsWith("https://")) {
+    const url = new URL(path)
+    return `${url.pathname}${url.search}`
+  }
+
+  return path
 }
 
 export function getWebSocketUrl() {
   const token = encodeURIComponent(getStoredToken())
-  return `${BASE_URL.replace("http://", "ws://").replace("https://", "wss://")}/ws?token=${token}`
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
+  return `${protocol}//${window.location.host}/ws?token=${token}`
 }
 
 export async function login(username, password) {

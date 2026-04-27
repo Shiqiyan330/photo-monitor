@@ -1,26 +1,25 @@
 #!/bin/sh
 set -eu
 
-# Backend-only deployment script for a Linux server.
+# Frontend deployment script for a Linux server.
+# It uses the frontend compose file so Nginx can proxy to the backend container.
 #
 # Usage:
-#   REPO_URL=https://github.com/your-org/photo-monitor.git sh scripts/deploy-backend.sh
+#   REPO_URL=https://github.com/your-org/photo-monitor.git sh scripts/deploy-frontend.sh
 #
 # Optional environment variables:
 #   BRANCH=main
 #   APP_DIR=/opt/photo-monitor
-#   CLEAN_FRONTEND=1
-#   COMPOSE_FILE=docker-compose.backend.yml
+#   COMPOSE_FILE=docker-compose.frontend.yml
 
 REPO_URL="${REPO_URL:-}"
 BRANCH="${BRANCH:-main}"
 APP_DIR="${APP_DIR:-/opt/photo-monitor}"
-CLEAN_FRONTEND="${CLEAN_FRONTEND:-1}"
-COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.backend.yml}"
+COMPOSE_FILE="${COMPOSE_FILE:-docker-compose.frontend.yml}"
 
 if [ -z "$REPO_URL" ]; then
   echo "ERROR: REPO_URL is required."
-  echo "Example: REPO_URL=https://github.com/your-org/photo-monitor.git sh scripts/deploy-backend.sh"
+  echo "Example: REPO_URL=https://github.com/your-org/photo-monitor.git sh scripts/deploy-frontend.sh"
   exit 1
 fi
 
@@ -62,29 +61,13 @@ else
 fi
 
 cd "$APP_DIR"
-
-if [ "$CLEAN_FRONTEND" = "1" ]; then
-  echo "==> Removing frontend and local-only folders not needed on backend server"
-  rm -rf \
-    "$APP_DIR/photo-monitor" \
-    "$APP_DIR/test01" \
-    "$APP_DIR/.vscode"
-fi
-
-echo "==> Preparing backend runtime data"
-mkdir -p "$APP_DIR/photo-backend/photos"
-
-if [ ! -f "$APP_DIR/photo-backend/users.json" ]; then
-  echo "==> users.json not found; backend will create default admin user on first start"
-fi
-
 COMPOSE="$(compose_cmd)"
 
-echo "==> Building and starting backend container"
+echo "==> Building and starting frontend container"
 $COMPOSE -f "$COMPOSE_FILE" up -d --build
 
-echo "==> Backend status"
+echo "==> Frontend status"
 $COMPOSE -f "$COMPOSE_FILE" ps
 
 echo "==> Deployment finished"
-echo "Backend API is bound locally: http://127.0.0.1:8000"
+echo "Frontend: http://SERVER_IP/"

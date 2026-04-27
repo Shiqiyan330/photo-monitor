@@ -127,13 +127,14 @@ function dedupePhotosByWindow(photos, windowSeconds) {
   }
 
   const deduped = []
-  let lastKeptTime = null
+  let lastPhotoTime = null
 
   for (const photo of photos) {
-    if (lastKeptTime == null || Math.abs(lastKeptTime - photo.time) > windowSeconds) {
+    if (lastPhotoTime == null || Math.abs(lastPhotoTime - photo.time) > windowSeconds) {
       deduped.push(photo)
-      lastKeptTime = photo.time
     }
+
+    lastPhotoTime = photo.time
   }
 
   return deduped
