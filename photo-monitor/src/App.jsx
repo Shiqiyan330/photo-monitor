@@ -24,6 +24,8 @@ const DEFAULT_STATION = "xiazhan"
 const DEFAULT_PHOTO_LIMIT = ""
 const DEFAULT_DEDUPE_ENABLED = true
 const DEFAULT_DEDUPE_WINDOW_SECONDS = "20"
+const PHOTO_FEED_BATCH_SIZE = 24
+const MOBILE_PHOTO_FEED_BATCH_SIZE = 4
 const PHOTO_LIMIT_STORAGE_KEY = "photo_monitor_photo_limit"
 const PHOTO_DEDUPE_ENABLED_STORAGE_KEY = "photo_monitor_dedupe_enabled"
 const PHOTO_DEDUPE_WINDOW_STORAGE_KEY = "photo_monitor_dedupe_window"
@@ -119,6 +121,12 @@ function readInitialDedupeEnabled() {
 
 function readInitialDedupeWindow() {
   return readStoredDigits(PHOTO_DEDUPE_WINDOW_STORAGE_KEY, DEFAULT_DEDUPE_WINDOW_SECONDS)
+}
+
+function getPhotoFeedBatchSize() {
+  return window.matchMedia("(max-width: 640px)").matches
+    ? MOBILE_PHOTO_FEED_BATCH_SIZE
+    : PHOTO_FEED_BATCH_SIZE
 }
 
 function dedupePhotosByWindow(photos, windowSeconds) {
@@ -472,6 +480,7 @@ function App() {
   const [photos, setPhotos] = useState([])
   const [station, setStation] = useState(DEFAULT_STATION)
   const [photoLimit, setPhotoLimit] = useState(readInitialPhotoLimit)
+  const [visiblePhotoCount, setVisiblePhotoCount] = useState(getPhotoFeedBatchSize)
   const [dedupeEnabled, setDedupeEnabled] = useState(readInitialDedupeEnabled)
   const [dedupeWindowSeconds, setDedupeWindowSeconds] = useState(readInitialDedupeWindow)
   const [selectedDepartment, setSelectedDepartment] = useState("")
@@ -494,8 +503,14 @@ function App() {
     parsePositiveInteger(dedupeWindowSeconds) ??
     parsePositiveInteger(DEFAULT_DEDUPE_WINDOW_SECONDS)
   const filteredPhotos = dedupeEnabled ? dedupePhotosByWindow(photos, parsedDedupeWindow) : photos
-  const displayedPhotos = parsedPhotoLimit ? filteredPhotos.slice(0, parsedPhotoLimit) : filteredPhotos
+  const limitedPhotos = parsedPhotoLimit ? filteredPhotos.slice(0, parsedPhotoLimit) : filteredPhotos
+  const displayedPhotos = limitedPhotos.slice(0, visiblePhotoCount)
+  const hasMorePhotos = displayedPhotos.length < limitedPhotos.length
   const accessibleModules = MODULES.filter((module) => hasPermission(user, module.permission))
+
+  const loadMorePhotos = () => {
+    setVisiblePhotoCount((current) => Math.min(current + getPhotoFeedBatchSize(), limitedPhotos.length))
+  }
 
   const showBanner = (message) => {
     setBannerMessage(message)
@@ -578,6 +593,10 @@ function App() {
   useEffect(() => {
     window.localStorage.setItem(PHOTO_DEDUPE_WINDOW_STORAGE_KEY, dedupeWindowSeconds)
   }, [dedupeWindowSeconds])
+
+  useEffect(() => {
+    setVisiblePhotoCount(getPhotoFeedBatchSize())
+  }, [photos, station, selectedDepartment, dedupeEnabled, dedupeWindowSeconds, photoLimit])
 
   useEffect(() => {
     if (!user) {
@@ -910,8 +929,10 @@ function App() {
               loading={loadingPhotos}
               station={station}
               displayCount={displayedPhotos.length}
-              totalCount={filteredPhotos.length}
+              totalCount={limitedPhotos.length}
               originalCount={photos.length}
+              hasMore={hasMorePhotos}
+              onLoadMore={loadMorePhotos}
               onClickPhoto={(photo) => setSelectedPhoto(photo)}
             />
           ) : null}

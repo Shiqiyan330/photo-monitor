@@ -19,6 +19,7 @@ def _collect_photos_from_folder(base: Path, folder: Path, department: str = "") 
             {
                 "name": file.name,
                 "url": f"/static/{rel_path.as_posix()}",
+                "thumbnail_url": f"/thumbnails/{rel_path.as_posix()}",
                 "time": stat.st_mtime,
                 "size": stat.st_size,
                 "folder": str(file.parent),

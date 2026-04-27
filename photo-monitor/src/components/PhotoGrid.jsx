@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react"
 import { getAssetUrl } from "../api"
 
 export default function PhotoGrid({
@@ -7,8 +8,31 @@ export default function PhotoGrid({
   displayCount,
   totalCount,
   originalCount,
+  hasMore,
+  onLoadMore,
   onClickPhoto,
 }) {
+  const loadMoreRef = useRef(null)
+
+  useEffect(() => {
+    const node = loadMoreRef.current
+    if (!node || !hasMore || loading) {
+      return undefined
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          onLoadMore()
+        }
+      },
+      { rootMargin: "600px 0px" },
+    )
+
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [hasMore, loading, onLoadMore])
+
   if (loading && photos.length === 0) {
     return <div className="status-card">正在加载 {station} 的照片...</div>
   }
@@ -28,9 +52,11 @@ export default function PhotoGrid({
         {photos.map((photo, index) => (
           <article key={`${photo.url}-${index}`} className="photo-card">
             <img
-              src={getAssetUrl(photo.url)}
+              src={getAssetUrl(photo.thumbnail_url ?? photo.url)}
               alt={photo.name}
               className="photo-thumb"
+              loading="lazy"
+              decoding="async"
               onClick={() => onClickPhoto(photo)}
             />
 
@@ -49,6 +75,12 @@ export default function PhotoGrid({
           </article>
         ))}
       </div>
+
+      {hasMore ? (
+        <div ref={loadMoreRef} className="status-card">
+          继续加载更多照片...
+        </div>
+      ) : null}
     </>
   )
 }
