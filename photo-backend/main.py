@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from routers import admin, auth, photo, ws
+from routers import admin, auth, photo, upload, ws
 from services.watcher_service import start_watch
 
 BASE_DIR = Path(__file__).resolve().parent / "photos"
@@ -21,6 +21,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(photo.router)
+app.include_router(upload.router)
 app.include_router(ws.router)
 
 
