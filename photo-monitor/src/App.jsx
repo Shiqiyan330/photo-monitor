@@ -332,10 +332,10 @@ function DocumentsPage({ onBack, user, departments, showBanner }) {
     loadFiles()
   }, [])
 
-  const handleUpload = async (payload) => {
+  const handleUpload = async (payload, options) => {
     setUploading(true)
     try {
-      await uploadCompanyFile(payload)
+      await uploadCompanyFile(payload, options)
       showBanner("文件上传成功")
       await loadFiles()
     } finally {
@@ -414,10 +414,10 @@ function LearningPage({ onBack, user, departments, showBanner }) {
     loadArticles()
   }, [])
 
-  const handleUpload = async (payload) => {
+  const handleUpload = async (payload, options) => {
     setUploading(true)
     try {
-      await uploadStudyArticle(payload)
+      await uploadStudyArticle(payload, options)
       showBanner("学习文章上传成功")
       await loadArticles()
     } finally {
@@ -604,6 +604,8 @@ function formatFileSize(size) {
 function UploadPanel({ title, description, departmentOptions, onSubmit, submitting }) {
   const [department, setDepartment] = useState(departmentOptions[0] || "")
   const [file, setFile] = useState(null)
+  const [dragActive, setDragActive] = useState(false)
+  const [progress, setProgress] = useState(0)
 
   useEffect(() => {
     if (!departmentOptions.includes(department)) {
@@ -616,13 +618,44 @@ function UploadPanel({ title, description, departmentOptions, onSubmit, submitti
     if (!file || !department) {
       return
     }
-    await onSubmit({ department, file })
-    event.currentTarget.reset()
-    setFile(null)
+    setProgress(0)
+    try {
+      await onSubmit({ department, file }, { onProgress: setProgress })
+      event.currentTarget.reset()
+      setFile(null)
+      setProgress(0)
+    } catch (error) {
+      setProgress(0)
+      throw error
+    }
+  }
+
+  const selectFile = (nextFile) => {
+    if (!nextFile || submitting) {
+      return
+    }
+    setFile(nextFile)
+    setProgress(0)
+  }
+
+  const handleDrag = (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    if (submitting) {
+      return
+    }
+    setDragActive(event.type === "dragenter" || event.type === "dragover")
+  }
+
+  const handleDrop = (event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setDragActive(false)
+    selectFile(event.dataTransfer.files?.[0] ?? null)
   }
 
   return (
-    <form className="upload-form" onSubmit={handleSubmit}>
+    <form className="upload-form" onSubmit={handleSubmit} onDragEnter={handleDrag}>
       <div>
         <h3>{title}</h3>
         <p className="panel-muted">{description}</p>
@@ -639,10 +672,34 @@ function UploadPanel({ title, description, departmentOptions, onSubmit, submitti
         </select>
       </label>
 
-      <label className="file-input-label">
-        <span>选择文件</span>
-        <input type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} required />
+      <label
+        className={dragActive ? "file-drop-zone active" : "file-drop-zone"}
+        onDragEnter={handleDrag}
+        onDragOver={handleDrag}
+        onDragLeave={handleDrag}
+        onDrop={handleDrop}
+      >
+        <span className="material-symbols-outlined file-drop-icon" aria-hidden="true">
+          upload_file
+        </span>
+        <span className="file-drop-title">{file ? file.name : "拖入文件或点击选择"}</span>
+        <span className="file-drop-meta">{file ? formatFileSize(file.size) : "支持单文件上传"}</span>
+        <input
+          type="file"
+          onChange={(event) => selectFile(event.target.files?.[0] ?? null)}
+          required
+          disabled={submitting}
+        />
       </label>
+
+      {submitting ? (
+        <div className="upload-progress" aria-label={`上传进度 ${progress}%`}>
+          <div className="upload-progress-track">
+            <span style={{ width: `${progress}%` }} />
+          </div>
+          <span>{progress}%</span>
+        </div>
+      ) : null}
 
       <button type="submit" className="primary-action-button icon-button-text" disabled={submitting || !file || !department}>
         <span className="material-symbols-outlined button-icon" aria-hidden="true">
@@ -722,10 +779,10 @@ function LedgerWorkspacePage({ onBack, user, departments, showBanner }) {
     loadLists()
   }, [])
 
-  const handleLedgerUpload = async (payload) => {
+  const handleLedgerUpload = async (payload, options) => {
     setUploading(true)
     try {
-      await uploadLedger(payload)
+      await uploadLedger(payload, options)
       showBanner("台账上传成功")
       await loadLists()
     } finally {

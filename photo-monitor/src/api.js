@@ -126,26 +126,65 @@ export function fetchPhotos(station, department = "", options = {}) {
   return request(`/photos?${params.toString()}`)
 }
 
-function uploadMultipart(path, { department, file }) {
+function uploadMultipart(path, { department, file }, options = {}) {
   const body = new FormData()
   body.append("department", department)
   body.append("file", file)
-  return request(path, {
-    method: "POST",
-    body,
+
+  if (!options.onProgress) {
+    return request(path, {
+      method: "POST",
+      body,
+    })
+  }
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open("POST", `${BASE_URL}${path}`)
+
+    const token = getStoredToken()
+    if (token) {
+      xhr.setRequestHeader("Authorization", `Bearer ${token}`)
+    }
+
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) {
+        return
+      }
+      options.onProgress(Math.round((event.loaded / event.total) * 100))
+    }
+
+    xhr.onload = () => {
+      const isJson = xhr.getResponseHeader("content-type")?.includes("application/json")
+      const payload = isJson && xhr.responseText ? JSON.parse(xhr.responseText) : null
+
+      if (xhr.status < 200 || xhr.status >= 300) {
+        const error = new Error(payload?.detail ?? "Request failed")
+        error.status = xhr.status
+        reject(error)
+        return
+      }
+
+      options.onProgress(100)
+      resolve(payload)
+    }
+
+    xhr.onerror = () => reject(new Error("Network error"))
+    xhr.onabort = () => reject(new Error("Upload cancelled"))
+    xhr.send(body)
   })
 }
 
-export function uploadCompanyFile(payload) {
-  return uploadMultipart("/uploads/files", payload)
+export function uploadCompanyFile(payload, options) {
+  return uploadMultipart("/uploads/files", payload, options)
 }
 
-export function uploadLedger(payload) {
-  return uploadMultipart("/uploads/ledgers", payload)
+export function uploadLedger(payload, options) {
+  return uploadMultipart("/uploads/ledgers", payload, options)
 }
 
-export function uploadStudyArticle(payload) {
-  return uploadMultipart("/uploads/study-articles", payload)
+export function uploadStudyArticle(payload, options) {
+  return uploadMultipart("/uploads/study-articles", payload, options)
 }
 
 export function fetchUploadedFiles() {
