@@ -144,12 +144,20 @@ export function uploadLedger(payload) {
   return uploadMultipart("/uploads/ledgers", payload)
 }
 
+export function uploadStudyArticle(payload) {
+  return uploadMultipart("/uploads/study-articles", payload)
+}
+
 export function fetchUploadedFiles() {
   return request("/uploads/files")
 }
 
 export function fetchLedgers() {
   return request("/uploads/ledgers")
+}
+
+export function fetchStudyArticles() {
+  return request("/uploads/study-articles")
 }
 
 export function deleteCompanyFile(id) {
@@ -160,6 +168,12 @@ export function deleteCompanyFile(id) {
 
 export function deleteLedger(id) {
   return request(`/uploads/ledgers/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  })
+}
+
+export function deleteStudyArticle(id) {
+  return request(`/uploads/study-articles/${encodeURIComponent(id)}`, {
     method: "DELETE",
   })
 }

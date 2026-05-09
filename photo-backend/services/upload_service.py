@@ -14,6 +14,8 @@ from services.photo_service import IMG_EXTS
 SAFE_NAME_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 ALLOWED_UPLOAD_EXTS = IMG_EXTS | {".zip", ".csv", ".xlsx", ".xls", ".json", ".txt", ".pdf"}
+ARTICLE_UPLOAD_EXTS = {".pdf", ".doc", ".docx", ".ppt", ".pptx", ".txt", ".md", ".html", ".htm", ".zip"}
+LEDGER_UPLOAD_EXTS = {".csv", ".xlsx", ".xls", ".json", ".txt", ".pdf", ".zip"}
 METADATA_FILENAME = ".metadata.json"
 
 
@@ -25,8 +27,13 @@ class UploadCategory:
 
 
 UPLOAD_CATEGORY_CONFIG = {
-    "files": UploadCategory("files", "company file", ALLOWED_UPLOAD_EXTS),
-    "ledgers": UploadCategory("ledgers", "ledger", {".csv", ".xlsx", ".xls", ".json", ".txt", ".pdf", ".zip"}),
+    "company_files": UploadCategory("company_files", "company file", ALLOWED_UPLOAD_EXTS),
+    "study_articles": UploadCategory("study_articles", "study article", ARTICLE_UPLOAD_EXTS),
+    "ledgers": UploadCategory("ledgers", "ledger", LEDGER_UPLOAD_EXTS),
+}
+
+LEGACY_CATEGORY_ALIASES = {
+    "files": "company_files",
 }
 
 
@@ -147,10 +154,14 @@ def _public_item(item: dict, include_download_url: bool = True) -> dict:
 
 
 def _category_config(category: str) -> UploadCategory:
-    config = UPLOAD_CATEGORY_CONFIG.get(category)
+    config = UPLOAD_CATEGORY_CONFIG.get(normalize_category(category))
     if not config:
         raise HTTPException(status_code=400, detail="Unsupported upload category")
     return config
+
+
+def normalize_category(category: str) -> str:
+    return LEGACY_CATEGORY_ALIASES.get(category, category)
 
 
 def save_photo_upload_file(
@@ -202,6 +213,7 @@ def save_data_upload_file(
     department: str,
     user: dict,
 ) -> dict:
+    category = normalize_category(category)
     config = _category_config(category)
 
     normalized_department = clean_path_part(department, "department")
@@ -240,6 +252,7 @@ def save_data_upload_file(
 
 
 def list_data_uploads(base: Path, category: str, user: dict) -> list[dict]:
+    category = normalize_category(category)
     _category_config(category)
 
     category_base = base / category
@@ -286,7 +299,7 @@ def list_data_uploads(base: Path, category: str, user: dict) -> list[dict]:
                 "department": department,
                 "size": stat.st_size,
                 "time": stat.st_mtime,
-                "url": f"/uploaded-data/{path_text}",
+                "url": f"/office-data/{path_text}",
                 "path": path_text,
                 "uploaded_by": "",
                 "uploaded_at": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
@@ -297,6 +310,7 @@ def list_data_uploads(base: Path, category: str, user: dict) -> list[dict]:
 
 
 def get_data_upload(base: Path, category: str, upload_id: str, user: dict) -> tuple[Path, dict]:
+    category = normalize_category(category)
     _category_config(category)
     metadata = _read_metadata(base)
     item = metadata.get(upload_id)
@@ -316,6 +330,7 @@ def get_data_upload(base: Path, category: str, upload_id: str, user: dict) -> tu
 
 
 def delete_data_upload(base: Path, category: str, upload_id: str, user: dict) -> dict:
+    category = normalize_category(category)
     target, item = get_data_upload(base, category, upload_id, user)
     if user["role"] != "admin" and item.get("uploaded_by") != user.get("username"):
         raise HTTPException(status_code=403, detail="Only admins or the uploader can delete this file")

@@ -7,5 +7,6 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - ./photo-backend/photos:/app/photos
+      - ./photo-backend/office_data:/app/office_data
       - ./photo-backend/users.json:/app/users.json
     restart: unless-stopped

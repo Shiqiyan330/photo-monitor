@@ -5,11 +5,13 @@ import {
   deleteCompanyFile,
   deleteEmployee,
   deleteLedger,
+  deleteStudyArticle,
   downloadFile,
   fetchLedgers,
   fetchCurrentUser,
   fetchEmployees,
   fetchPhotos,
+  fetchStudyArticles,
   fetchUploadedFiles,
   getStoredToken,
   getWebSocketUrl,
@@ -19,6 +21,7 @@ import {
   updateEmployee,
   uploadCompanyFile,
   uploadLedger,
+  uploadStudyArticle,
 } from "./api"
 import ChangePasswordModal from "./components/ChangePasswordModal"
 import EmployeeManagerPage from "./components/EmployeeManagerPage"
@@ -305,97 +308,166 @@ function OfficeModulePage({ title, children, onBack }) {
   )
 }
 
-function DocumentsPage({ onBack }) {
+function DocumentsPage({ onBack, user, departments, showBanner }) {
+  const [files, setFiles] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState("")
+  const departmentOptions = getDepartmentViewOptions(user, departments).filter(Boolean)
+
+  const loadFiles = async () => {
+    setLoading(true)
+    setError("")
+    try {
+      const data = await fetchUploadedFiles()
+      setFiles(data.items ?? [])
+    } catch (loadError) {
+      setError(loadError.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadFiles()
+  }, [])
+
+  const handleUpload = async (payload) => {
+    setUploading(true)
+    try {
+      await uploadCompanyFile(payload)
+      showBanner("文件上传成功")
+      await loadFiles()
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleDownload = async (item) => {
+    await downloadFile(getAssetUrl(item.url), item.name)
+  }
+
+  const handleDelete = async (item) => {
+    if (!item.id || !window.confirm(`确认删除文件：${item.name}？`)) {
+      return
+    }
+    await deleteCompanyFile(item.id)
+    showBanner("文件已删除")
+    await loadFiles()
+  }
+
   return (
     <OfficeModulePage title="公司文件" onBack={onBack}>
       <section className="office-toolbar">
-        <button type="button" className="ghost-button icon-button-text">
-          <span className="material-symbols-outlined button-icon" aria-hidden="true">
-            arrow_back
-          </span>
-          返回
-        </button>
-        <label className="toolbar-select">
-          <span>部门筛选</span>
-          <select defaultValue="">
-            <option value="">所有部门</option>
-          </select>
-        </label>
-        <button type="button" className="primary-action-button icon-button-text">
-          <span className="material-symbols-outlined button-icon" aria-hidden="true">
-            upload_file
-          </span>
-          上传文件
-        </button>
-        <button type="button" className="ghost-button icon-button-text">
+        <div>
+          <h3>公司文件</h3>
+          <p className="panel-muted">部门资料、通知附件和通用文档统一保存到公司文件目录。</p>
+        </div>
+        <button type="button" className="ghost-button icon-button-text" onClick={loadFiles} disabled={loading}>
           <span className="material-symbols-outlined button-icon" aria-hidden="true">
             refresh
           </span>
-          刷新
+          {loading ? "刷新中..." : "刷新列表"}
         </button>
       </section>
 
-      <section className="office-table">
-        <div className="office-table-row office-table-head">
-          <span>文件名称</span>
-          <span>文件形式</span>
-          <span>上传时间</span>
-          <span>上传人</span>
-          <span>下载</span>
-          <span>删除</span>
+      {error ? <div className="status-card error-card">{error}</div> : null}
+
+      <section className="ledger-upload-grid single-column">
+        <div className="office-panel">
+          <UploadPanel
+            title="上传公司文件"
+            description="支持图片、PDF、Office 表格、文本、压缩包等常用资料。"
+            departmentOptions={departmentOptions}
+            onSubmit={handleUpload}
+            submitting={uploading}
+          />
         </div>
-        <div className="empty-state">公司文件接口待接入，删除操作将使用密码保护。</div>
       </section>
+
+      <UploadList title="公司文件列表" items={files} emptyText="还没有上传公司文件。" onDelete={handleDelete} onDownload={handleDownload} />
     </OfficeModulePage>
   )
 }
 
-function LearningPage({ onBack }) {
-  const [activeTab, setActiveTab] = useState("articles")
+function LearningPage({ onBack, user, departments, showBanner }) {
+  const [articles, setArticles] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [error, setError] = useState("")
+  const departmentOptions = getDepartmentViewOptions(user, departments).filter(Boolean)
+
+  const loadArticles = async () => {
+    setLoading(true)
+    setError("")
+    try {
+      const data = await fetchStudyArticles()
+      setArticles(data.items ?? [])
+    } catch (loadError) {
+      setError(loadError.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadArticles()
+  }, [])
+
+  const handleUpload = async (payload) => {
+    setUploading(true)
+    try {
+      await uploadStudyArticle(payload)
+      showBanner("学习文章上传成功")
+      await loadArticles()
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleDownload = async (item) => {
+    await downloadFile(getAssetUrl(item.url), item.name)
+  }
+
+  const handleDelete = async (item) => {
+    if (!item.id || !window.confirm(`确认删除学习文章：${item.name}？`)) {
+      return
+    }
+    await deleteStudyArticle(item.id)
+    showBanner("学习文章已删除")
+    await loadArticles()
+  }
 
   return (
     <OfficeModulePage title="学习交流" onBack={onBack}>
       <section className="office-toolbar">
-        <div className="tab-group">
-          <button
-            type="button"
-            className={activeTab === "articles" ? "station-button active" : "station-button"}
-            onClick={() => setActiveTab("articles")}
-          >
-            学习文章
-          </button>
-          <button
-            type="button"
-            className={activeTab === "discussion" ? "station-button active" : "station-button"}
-            onClick={() => setActiveTab("discussion")}
-          >
-            讨论区
-          </button>
+        <div>
+          <h3>学习文章</h3>
+          <p className="panel-muted">上传培训资料、制度学习文档和内部交流文章，列表按账号可访问部门过滤。</p>
         </div>
-        <button type="button" className="primary-action-button icon-button-text">
+        <button type="button" className="ghost-button icon-button-text" onClick={loadArticles} disabled={loading}>
           <span className="material-symbols-outlined button-icon" aria-hidden="true">
-            upload_file
+            refresh
           </span>
-          上传文章
+          {loading ? "刷新中..." : "刷新列表"}
         </button>
       </section>
 
-      {activeTab === "articles" ? (
-        <section className="office-table">
-          <div className="office-table-row office-table-head">
-            <span>文件名称</span>
-            <span>上传时间</span>
-            <span>上传人</span>
-            <span>上传人删除</span>
-            <span>密码删除</span>
-          </div>
-          <div className="empty-state">学习文章接口待接入，后续点击文件名称可直接查看文章。</div>
-        </section>
-      ) : (
-        <section className="discussion-panel">
-          <div className="empty-state">讨论区接口待接入，目标是仅支持内部文字交流。</div>
-        </section>
-      )}
+      {error ? <div className="status-card error-card">{error}</div> : null}
+
+      <section className="ledger-upload-grid single-column">
+        <div className="office-panel">
+          <UploadPanel
+            title="上传学习文章"
+            description="支持 PDF、Word、PPT、文本、Markdown、HTML 和压缩包。"
+            departmentOptions={departmentOptions}
+            onSubmit={handleUpload}
+            submitting={uploading}
+          />
+        </div>
+      </section>
+
+      <UploadList title="学习文章列表" items={articles} emptyText="还没有上传学习文章。" onDelete={handleDelete} onDownload={handleDownload} />
     </OfficeModulePage>
   )
 }
@@ -627,10 +699,9 @@ function UploadList({ title, items, emptyText, onDelete, onDownload }) {
 }
 
 function LedgerWorkspacePage({ onBack, user, departments, showBanner }) {
-  const [files, setFiles] = useState([])
   const [ledgers, setLedgers] = useState([])
   const [loading, setLoading] = useState(false)
-  const [uploadingType, setUploadingType] = useState("")
+  const [uploading, setUploading] = useState(false)
   const [error, setError] = useState("")
   const departmentOptions = getDepartmentViewOptions(user, departments).filter(Boolean)
 
@@ -638,8 +709,7 @@ function LedgerWorkspacePage({ onBack, user, departments, showBanner }) {
     setLoading(true)
     setError("")
     try {
-      const [fileData, ledgerData] = await Promise.all([fetchUploadedFiles(), fetchLedgers()])
-      setFiles(fileData.items ?? [])
+      const ledgerData = await fetchLedgers()
       setLedgers(ledgerData.items ?? [])
     } catch (loadError) {
       setError(loadError.message)
@@ -652,35 +722,15 @@ function LedgerWorkspacePage({ onBack, user, departments, showBanner }) {
     loadLists()
   }, [])
 
-  const handleFileUpload = async (payload) => {
-    setUploadingType("file")
-    try {
-      await uploadCompanyFile(payload)
-      showBanner("文件上传成功")
-      await loadLists()
-    } finally {
-      setUploadingType("")
-    }
-  }
-
   const handleLedgerUpload = async (payload) => {
-    setUploadingType("ledger")
+    setUploading(true)
     try {
       await uploadLedger(payload)
       showBanner("台账上传成功")
       await loadLists()
     } finally {
-      setUploadingType("")
+      setUploading(false)
     }
-  }
-
-  const handleDeleteFile = async (item) => {
-    if (!item.id || !window.confirm(`确认删除文件：${item.name}？`)) {
-      return
-    }
-    await deleteCompanyFile(item.id)
-    showBanner("文件已删除")
-    await loadLists()
   }
 
   const handleDeleteLedger = async (item) => {
@@ -703,8 +753,8 @@ function LedgerWorkspacePage({ onBack, user, departments, showBanner }) {
     <OfficeModulePage title="台账管理" onBack={onBack}>
       <section className="office-toolbar">
         <div>
-          <h3>文件上传与台账上传</h3>
-          <p className="panel-muted">普通文件和台账分目录保存，列表按当前账号可访问部门过滤。</p>
+          <h3>台账上传</h3>
+          <p className="panel-muted">工作台账、日报、月报和 Excel 表格统一保存到台账目录。</p>
         </div>
         <button type="button" className="ghost-button icon-button-text" onClick={loadLists} disabled={loading}>
           <span className="material-symbols-outlined button-icon" aria-hidden="true">
@@ -716,43 +766,25 @@ function LedgerWorkspacePage({ onBack, user, departments, showBanner }) {
 
       {error ? <div className="status-card error-card">{error}</div> : null}
 
-      <section className="ledger-upload-grid">
-        <div className="office-panel">
-          <UploadPanel
-            title="上传文件"
-            description="用于部门通用资料、附件或临时文件。"
-            departmentOptions={departmentOptions}
-            onSubmit={handleFileUpload}
-            submitting={uploadingType === "file"}
-          />
-        </div>
+      <section className="ledger-upload-grid single-column">
         <div className="office-panel">
           <UploadPanel
             title="上传台账"
             description="用于工作台账、日报、月报、Excel 表格等。"
             departmentOptions={departmentOptions}
             onSubmit={handleLedgerUpload}
-            submitting={uploadingType === "ledger"}
+            submitting={uploading}
           />
         </div>
       </section>
 
-      <section className="ledger-list-grid">
-        <UploadList
-          title="文件列表"
-          items={files}
-          emptyText="还没有上传文件。"
-          onDelete={handleDeleteFile}
-          onDownload={handleDownload}
-        />
-        <UploadList
-          title="台账列表"
-          items={ledgers}
-          emptyText="还没有上传台账。"
-          onDelete={handleDeleteLedger}
-          onDownload={handleDownload}
-        />
-      </section>
+      <UploadList
+        title="台账列表"
+        items={ledgers}
+        emptyText="还没有上传台账。"
+        onDelete={handleDeleteLedger}
+        onDownload={handleDownload}
+      />
     </OfficeModulePage>
   )
 }
@@ -1237,7 +1269,7 @@ function App() {
   if (currentPage === PAGE_DOCUMENTS && hasPermission(user, "files")) {
     return (
       <div className="app-shell office-page-shell">
-        <DocumentsPage onBack={openDashboardPage} />
+        <DocumentsPage user={user} departments={departments} showBanner={showBanner} onBack={openDashboardPage} />
       </div>
     )
   }
@@ -1245,7 +1277,7 @@ function App() {
   if (currentPage === PAGE_LEARNING && hasPermission(user, "study")) {
     return (
       <div className="app-shell office-page-shell">
-        <LearningPage onBack={openDashboardPage} />
+        <LearningPage user={user} departments={departments} showBanner={showBanner} onBack={openDashboardPage} />
       </div>
     )
   }

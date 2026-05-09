@@ -8,7 +8,7 @@ from routers import admin, auth, photo, upload, ws
 from services.watcher_service import start_watch
 
 BASE_DIR = Path(__file__).resolve().parent / "photos"
-UPLOAD_DATA_DIR = Path(__file__).resolve().parent / "uploaded_data"
+OFFICE_DATA_DIR = Path(__file__).resolve().parent / "office_data"
 app = FastAPI()
 
 app.add_middleware(
@@ -35,5 +35,5 @@ def run_watch():
 threading.Thread(target=run_watch, daemon=True).start()
 
 app.mount("/static", StaticFiles(directory=BASE_DIR), name="static")
-UPLOAD_DATA_DIR.mkdir(parents=True, exist_ok=True)
-app.mount("/uploaded-data", StaticFiles(directory=UPLOAD_DATA_DIR), name="uploaded-data")
+OFFICE_DATA_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/office-data", StaticFiles(directory=OFFICE_DATA_DIR), name="office-data")
