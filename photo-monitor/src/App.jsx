@@ -410,6 +410,105 @@ function LedgerPage({ onBack }) {
   )
 }
 
+function AutoUploaderPage({ onBack, user }) {
+  const serverOrigin = window.location.origin
+  const defaultDepartment = user?.department || "部门名"
+  const loginCommand = `powershell -ExecutionPolicy Bypass -File .\\photo-monitor-uploader.ps1 login -Server ${serverOrigin} -Username ${user?.username || "用户名"} -WatchDir "D:\\待上传目录" -Department ${defaultDepartment} -Station uploads -IntervalSeconds 60`
+
+  return (
+    <OfficeModulePage title="台账上传" onBack={onBack}>
+      <section className="uploader-hero">
+        <div>
+          <p className="eyebrow">Local Auto Uploader</p>
+          <h3>自动上传工具</h3>
+          <p className="panel-muted">
+            下载 PowerShell 脚本后，在本地登录一次即可隐藏到后台运行。程序会定时检查固定目录，并按账号部门权限上传新增文件。
+          </p>
+        </div>
+        <a className="primary-action-button icon-button-text" href="/downloads/photo-monitor-uploader.ps1" download>
+          <span className="material-symbols-outlined button-icon" aria-hidden="true">
+            download
+          </span>
+          下载上传脚本
+        </a>
+      </section>
+
+      <section className="uploader-layout">
+        <div className="office-panel uploader-guide">
+          <div className="panel-header">
+            <div>
+              <h3>配置步骤</h3>
+              <p className="panel-muted">推荐先在前台测试一次，确认上传成功后再切到后台运行。</p>
+            </div>
+          </div>
+
+          <ol className="setup-steps">
+            <li>
+              <span className="step-index">1</span>
+              <div>
+                <strong>保存脚本</strong>
+                <p>
+                  把下载的 <code>photo-monitor-uploader.ps1</code> 放到本地固定目录，例如桌面或{" "}
+                  <code>D:\PhotoUploader</code>。
+                </p>
+              </div>
+            </li>
+            <li>
+              <span className="step-index">2</span>
+              <div>
+                <strong>登录并绑定扫描目录</strong>
+                <p>在 PowerShell 中执行登录命令，按提示输入密码。部门必须是当前账号有上传权限的部门。</p>
+              </div>
+            </li>
+            <li>
+              <span className="step-index">3</span>
+              <div>
+                <strong>测试上传</strong>
+                <p>
+                  执行 <code>once</code> 扫描一次，确认日志显示 uploaded 后再进入后台模式。
+                </p>
+              </div>
+            </li>
+            <li>
+              <span className="step-index">4</span>
+              <div>
+                <strong>后台运行</strong>
+                <p>
+                  执行 <code>start-hidden</code> 后窗口会隐藏，程序每隔配置时间扫描一次目录。
+                </p>
+              </div>
+            </li>
+          </ol>
+        </div>
+
+        <div className="office-panel uploader-commands">
+          <h3>命令示例</h3>
+          <label className="command-block">
+            <span>首次登录</span>
+            <code>{loginCommand}</code>
+          </label>
+          <label className="command-block">
+            <span>扫描一次</span>
+            <code>powershell -ExecutionPolicy Bypass -File .\photo-monitor-uploader.ps1 once</code>
+          </label>
+          <label className="command-block">
+            <span>隐藏后台运行</span>
+            <code>powershell -ExecutionPolicy Bypass -File .\photo-monitor-uploader.ps1 start-hidden</code>
+          </label>
+          <label className="command-block">
+            <span>开机自启</span>
+            <code>powershell -ExecutionPolicy Bypass -File .\photo-monitor-uploader.ps1 install-startup</code>
+          </label>
+          <label className="command-block">
+            <span>查看状态和日志位置</span>
+            <code>powershell -ExecutionPolicy Bypass -File .\photo-monitor-uploader.ps1 status</code>
+          </label>
+        </div>
+      </section>
+    </OfficeModulePage>
+  )
+}
+
 function StructurePage({ onBack, user, employees }) {
   const [collapsedDepartments, setCollapsedDepartments] = useState(new Set())
   const visibleEmployees = user.role === "admin" ? employees : [user]
@@ -906,7 +1005,7 @@ function App() {
   if (currentPage === PAGE_LEDGER && hasPermission(user, "upload")) {
     return (
       <div className="app-shell office-page-shell">
-        <LedgerPage onBack={openDashboardPage} />
+        <AutoUploaderPage user={user} onBack={openDashboardPage} />
       </div>
     )
   }
