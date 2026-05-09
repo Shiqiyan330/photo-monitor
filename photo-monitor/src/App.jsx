@@ -2,7 +2,10 @@ import { useEffect, useRef, useState } from "react"
 import {
   changePassword,
   createEmployee,
+  deleteCompanyFile,
   deleteEmployee,
+  deleteLedger,
+  downloadFile,
   fetchLedgers,
   fetchCurrentUser,
   fetchEmployees,
@@ -579,7 +582,7 @@ function UploadPanel({ title, description, departmentOptions, onSubmit, submitti
   )
 }
 
-function UploadList({ title, items, emptyText }) {
+function UploadList({ title, items, emptyText, onDelete, onDownload }) {
   return (
     <section className="office-table upload-list">
       <div className="panel-header upload-list-header">
@@ -591,7 +594,9 @@ function UploadList({ title, items, emptyText }) {
         <span>部门</span>
         <span>大小</span>
         <span>上传时间</span>
+        <span>上传人</span>
         <span>下载</span>
+        <span>删除</span>
       </div>
       {items.length ? (
         items.map((item) => (
@@ -600,9 +605,18 @@ function UploadList({ title, items, emptyText }) {
             <span>{item.department}</span>
             <span>{formatFileSize(item.size)}</span>
             <span>{item.time ? new Date(item.time * 1000).toLocaleString() : "-"}</span>
-            <a className="ghost-button compact-button" href={item.url} target="_blank" rel="noreferrer">
+            <span>{item.uploaded_by || "-"}</span>
+            <button type="button" className="ghost-button compact-button" onClick={() => onDownload(item)}>
               下载
-            </a>
+            </button>
+            <button
+              type="button"
+              className="ghost-button compact-button"
+              onClick={() => onDelete(item)}
+              disabled={!item.id}
+            >
+              删除
+            </button>
           </div>
         ))
       ) : (
@@ -660,6 +674,31 @@ function LedgerWorkspacePage({ onBack, user, departments, showBanner }) {
     }
   }
 
+  const handleDeleteFile = async (item) => {
+    if (!item.id || !window.confirm(`确认删除文件：${item.name}？`)) {
+      return
+    }
+    await deleteCompanyFile(item.id)
+    showBanner("文件已删除")
+    await loadLists()
+  }
+
+  const handleDeleteLedger = async (item) => {
+    if (!item.id || !window.confirm(`确认删除台账：${item.name}？`)) {
+      return
+    }
+    await deleteLedger(item.id)
+    showBanner("台账已删除")
+    await loadLists()
+  }
+
+  const handleDownload = async (item) => {
+    if (!item.url) {
+      return
+    }
+    await downloadFile(getAssetUrl(item.url), item.name)
+  }
+
   return (
     <OfficeModulePage title="台账管理" onBack={onBack}>
       <section className="office-toolbar">
@@ -699,8 +738,20 @@ function LedgerWorkspacePage({ onBack, user, departments, showBanner }) {
       </section>
 
       <section className="ledger-list-grid">
-        <UploadList title="文件列表" items={files} emptyText="还没有上传文件。" />
-        <UploadList title="台账列表" items={ledgers} emptyText="还没有上传台账。" />
+        <UploadList
+          title="文件列表"
+          items={files}
+          emptyText="还没有上传文件。"
+          onDelete={handleDeleteFile}
+          onDownload={handleDownload}
+        />
+        <UploadList
+          title="台账列表"
+          items={ledgers}
+          emptyText="还没有上传台账。"
+          onDelete={handleDeleteLedger}
+          onDownload={handleDownload}
+        />
       </section>
     </OfficeModulePage>
   )

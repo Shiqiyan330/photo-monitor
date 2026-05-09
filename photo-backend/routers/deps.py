@@ -32,6 +32,12 @@ def require_upload_access(user: dict = Depends(require_login)) -> dict:
     return user
 
 
+def require_file_access(user: dict = Depends(require_login)) -> dict:
+    if user["role"] != "admin" and "files" not in user["permissions"] and "upload" not in user["permissions"]:
+        raise HTTPException(status_code=403, detail="No permission to access files")
+    return user
+
+
 def require_admin(user: dict = Depends(require_login)) -> dict:
     if user["role"] != "admin":
         raise HTTPException(status_code=403, detail="当前账号没有管理员权限")

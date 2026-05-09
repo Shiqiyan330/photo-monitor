@@ -1,9 +1,16 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi.responses import FileResponse
 
-from routers.deps import require_upload_access
-from services.upload_service import list_data_uploads, save_data_upload_file, save_photo_upload_file
+from routers.deps import require_file_access, require_upload_access
+from services.upload_service import (
+    delete_data_upload,
+    get_data_upload,
+    list_data_uploads,
+    save_data_upload_file,
+    save_photo_upload_file,
+)
 
 router = APIRouter(prefix="/uploads", tags=["uploads"])
 
@@ -33,8 +40,20 @@ def upload_file_data(
 
 
 @router.get("/files")
-def get_uploaded_files(user: dict = Depends(require_upload_access)):
+def get_uploaded_files(user: dict = Depends(require_file_access)):
     return {"items": list_data_uploads(DATA_BASE, "files", user)}
+
+
+@router.get("/files/{upload_id}/download")
+def download_uploaded_file(upload_id: str, user: dict = Depends(require_file_access)):
+    target, item = get_data_upload(DATA_BASE, "files", upload_id, user)
+    return FileResponse(target, filename=item["name"], media_type=item.get("content_type"))
+
+
+@router.delete("/files/{upload_id}")
+def delete_uploaded_file(upload_id: str, user: dict = Depends(require_file_access)):
+    item = delete_data_upload(DATA_BASE, "files", upload_id, user)
+    return {"success": True, "item": item}
 
 
 @router.post("/ledgers")
@@ -50,3 +69,15 @@ def upload_ledger_data(
 @router.get("/ledgers")
 def get_uploaded_ledgers(user: dict = Depends(require_upload_access)):
     return {"items": list_data_uploads(DATA_BASE, "ledgers", user)}
+
+
+@router.get("/ledgers/{upload_id}/download")
+def download_uploaded_ledger(upload_id: str, user: dict = Depends(require_upload_access)):
+    target, item = get_data_upload(DATA_BASE, "ledgers", upload_id, user)
+    return FileResponse(target, filename=item["name"], media_type=item.get("content_type"))
+
+
+@router.delete("/ledgers/{upload_id}")
+def delete_uploaded_ledger(upload_id: str, user: dict = Depends(require_upload_access)):
+    item = delete_data_upload(DATA_BASE, "ledgers", upload_id, user)
+    return {"success": True, "item": item}

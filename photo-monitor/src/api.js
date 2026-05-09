@@ -37,6 +37,31 @@ async function request(path, options = {}) {
   return payload
 }
 
+export async function downloadFile(path, filename) {
+  const token = getStoredToken()
+  const response = await fetch(`${BASE_URL}${path}`, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  })
+
+  if (!response.ok) {
+    const isJson = response.headers.get("content-type")?.includes("application/json")
+    const payload = isJson ? await response.json() : null
+    throw new Error(payload?.detail ?? "Download failed")
+  }
+
+  const blob = await response.blob()
+  const url = window.URL.createObjectURL(blob)
+  const anchor = document.createElement("a")
+  anchor.href = url
+  anchor.download = filename || "download"
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  window.URL.revokeObjectURL(url)
+}
+
 export function getAssetUrl(path) {
   if (!path) {
     return ""
@@ -125,6 +150,18 @@ export function fetchUploadedFiles() {
 
 export function fetchLedgers() {
   return request("/uploads/ledgers")
+}
+
+export function deleteCompanyFile(id) {
+  return request(`/uploads/files/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  })
+}
+
+export function deleteLedger(id) {
+  return request(`/uploads/ledgers/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  })
 }
 
 export function fetchEmployees() {
