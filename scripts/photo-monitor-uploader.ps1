@@ -22,7 +22,7 @@ $ErrorActionPreference = "Stop"
 $AppName = "PhotoMonitorUploader"
 $AllowedExtensions = @(".jpg", ".jpeg", ".png", ".webp", ".zip", ".csv", ".xlsx", ".xls", ".json", ".txt", ".pdf")
 $LedgerExtensions = @(".csv", ".xlsx", ".xls", ".json", ".txt", ".pdf", ".zip")
-$MaxUploadBytes = 50MB
+$MaxUploadBytes = 200MB
 $MaxLogBytes = 5MB
 $MutexName = "Global\PhotoMonitorUploader"
 

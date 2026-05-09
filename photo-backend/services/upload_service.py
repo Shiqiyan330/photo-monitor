@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import os
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
@@ -12,7 +13,8 @@ from fastapi import HTTPException, UploadFile
 from services.photo_service import IMG_EXTS
 
 SAFE_NAME_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
-MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+DEFAULT_MAX_UPLOAD_MB = 200
+MAX_UPLOAD_BYTES = int(os.getenv("PHOTO_MONITOR_MAX_UPLOAD_MB", str(DEFAULT_MAX_UPLOAD_MB))) * 1024 * 1024
 ALLOWED_UPLOAD_EXTS = IMG_EXTS | {".zip", ".csv", ".xlsx", ".xls", ".json", ".txt", ".pdf"}
 ARTICLE_UPLOAD_EXTS = {".pdf", ".doc", ".docx", ".ppt", ".pptx", ".txt", ".md", ".html", ".htm", ".zip"}
 LEDGER_UPLOAD_EXTS = {".csv", ".xlsx", ".xls", ".json", ".txt", ".pdf", ".zip"}
