@@ -3,15 +3,19 @@ import {
   changePassword,
   createEmployee,
   deleteEmployee,
+  fetchLedgers,
   fetchCurrentUser,
   fetchEmployees,
   fetchPhotos,
+  fetchUploadedFiles,
   getStoredToken,
   getWebSocketUrl,
   login,
   logout,
   setStoredToken,
   updateEmployee,
+  uploadCompanyFile,
+  uploadLedger,
 } from "./api"
 import ChangePasswordModal from "./components/ChangePasswordModal"
 import EmployeeManagerPage from "./components/EmployeeManagerPage"
@@ -504,6 +508,199 @@ function AutoUploaderPage({ onBack, user }) {
             <code>powershell -ExecutionPolicy Bypass -File .\photo-monitor-uploader.ps1 status</code>
           </label>
         </div>
+      </section>
+    </OfficeModulePage>
+  )
+}
+
+function formatFileSize(size) {
+  if (!Number.isFinite(size)) {
+    return "-"
+  }
+  if (size >= 1024 * 1024) {
+    return `${(size / 1024 / 1024).toFixed(1)} MB`
+  }
+  if (size >= 1024) {
+    return `${(size / 1024).toFixed(1)} KB`
+  }
+  return `${size} B`
+}
+
+function UploadPanel({ title, description, departmentOptions, onSubmit, submitting }) {
+  const [department, setDepartment] = useState(departmentOptions[0] || "")
+  const [file, setFile] = useState(null)
+
+  useEffect(() => {
+    if (!departmentOptions.includes(department)) {
+      setDepartment(departmentOptions[0] || "")
+    }
+  }, [departmentOptions, department])
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    if (!file || !department) {
+      return
+    }
+    await onSubmit({ department, file })
+    event.currentTarget.reset()
+    setFile(null)
+  }
+
+  return (
+    <form className="upload-form" onSubmit={handleSubmit}>
+      <div>
+        <h3>{title}</h3>
+        <p className="panel-muted">{description}</p>
+      </div>
+
+      <label className="toolbar-select">
+        <span>上传部门</span>
+        <select value={department} onChange={(event) => setDepartment(event.target.value)} required>
+          {departmentOptions.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="file-input-label">
+        <span>选择文件</span>
+        <input type="file" onChange={(event) => setFile(event.target.files?.[0] ?? null)} required />
+      </label>
+
+      <button type="submit" className="primary-action-button icon-button-text" disabled={submitting || !file || !department}>
+        <span className="material-symbols-outlined button-icon" aria-hidden="true">
+          upload_file
+        </span>
+        {submitting ? "上传中..." : "上传"}
+      </button>
+    </form>
+  )
+}
+
+function UploadList({ title, items, emptyText }) {
+  return (
+    <section className="office-table upload-list">
+      <div className="panel-header upload-list-header">
+        <h3>{title}</h3>
+        <span className="panel-muted">共 {items.length} 条</span>
+      </div>
+      <div className="upload-table-row upload-table-head">
+        <span>文件名</span>
+        <span>部门</span>
+        <span>大小</span>
+        <span>上传时间</span>
+        <span>下载</span>
+      </div>
+      {items.length ? (
+        items.map((item) => (
+          <div key={item.path} className="upload-table-row">
+            <span className="upload-file-name">{item.name}</span>
+            <span>{item.department}</span>
+            <span>{formatFileSize(item.size)}</span>
+            <span>{item.time ? new Date(item.time * 1000).toLocaleString() : "-"}</span>
+            <a className="ghost-button compact-button" href={item.url} target="_blank" rel="noreferrer">
+              下载
+            </a>
+          </div>
+        ))
+      ) : (
+        <div className="empty-state">{emptyText}</div>
+      )}
+    </section>
+  )
+}
+
+function LedgerWorkspacePage({ onBack, user, departments, showBanner }) {
+  const [files, setFiles] = useState([])
+  const [ledgers, setLedgers] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [uploadingType, setUploadingType] = useState("")
+  const [error, setError] = useState("")
+  const departmentOptions = getDepartmentViewOptions(user, departments).filter(Boolean)
+
+  const loadLists = async () => {
+    setLoading(true)
+    setError("")
+    try {
+      const [fileData, ledgerData] = await Promise.all([fetchUploadedFiles(), fetchLedgers()])
+      setFiles(fileData.items ?? [])
+      setLedgers(ledgerData.items ?? [])
+    } catch (loadError) {
+      setError(loadError.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadLists()
+  }, [])
+
+  const handleFileUpload = async (payload) => {
+    setUploadingType("file")
+    try {
+      await uploadCompanyFile(payload)
+      showBanner("文件上传成功")
+      await loadLists()
+    } finally {
+      setUploadingType("")
+    }
+  }
+
+  const handleLedgerUpload = async (payload) => {
+    setUploadingType("ledger")
+    try {
+      await uploadLedger(payload)
+      showBanner("台账上传成功")
+      await loadLists()
+    } finally {
+      setUploadingType("")
+    }
+  }
+
+  return (
+    <OfficeModulePage title="台账管理" onBack={onBack}>
+      <section className="office-toolbar">
+        <div>
+          <h3>文件上传与台账上传</h3>
+          <p className="panel-muted">普通文件和台账分目录保存，列表按当前账号可访问部门过滤。</p>
+        </div>
+        <button type="button" className="ghost-button icon-button-text" onClick={loadLists} disabled={loading}>
+          <span className="material-symbols-outlined button-icon" aria-hidden="true">
+            refresh
+          </span>
+          {loading ? "刷新中..." : "刷新列表"}
+        </button>
+      </section>
+
+      {error ? <div className="status-card error-card">{error}</div> : null}
+
+      <section className="ledger-upload-grid">
+        <div className="office-panel">
+          <UploadPanel
+            title="上传文件"
+            description="用于部门通用资料、附件或临时文件。"
+            departmentOptions={departmentOptions}
+            onSubmit={handleFileUpload}
+            submitting={uploadingType === "file"}
+          />
+        </div>
+        <div className="office-panel">
+          <UploadPanel
+            title="上传台账"
+            description="用于工作台账、日报、月报、Excel 表格等。"
+            departmentOptions={departmentOptions}
+            onSubmit={handleLedgerUpload}
+            submitting={uploadingType === "ledger"}
+          />
+        </div>
+      </section>
+
+      <section className="ledger-list-grid">
+        <UploadList title="文件列表" items={files} emptyText="还没有上传文件。" />
+        <UploadList title="台账列表" items={ledgers} emptyText="还没有上传台账。" />
       </section>
     </OfficeModulePage>
   )
@@ -1005,7 +1202,7 @@ function App() {
   if (currentPage === PAGE_LEDGER && hasPermission(user, "upload")) {
     return (
       <div className="app-shell office-page-shell">
-        <AutoUploaderPage user={user} onBack={openDashboardPage} />
+        <LedgerWorkspacePage user={user} departments={departments} showBanner={showBanner} onBack={openDashboardPage} />
       </div>
     )
   }

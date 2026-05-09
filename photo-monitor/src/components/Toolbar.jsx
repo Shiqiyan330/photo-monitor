@@ -87,9 +87,17 @@ export default function Toolbar({
         ) : null}
       </div>
 
-      <button type="button" className="ghost-button" onClick={onRefresh} disabled={loading}>
-        {loading ? "刷新中..." : "手动刷新"}
-      </button>
+      <div className="toolbar-actions">
+        <a className="ghost-button icon-button-text" href="/downloads/photo-monitor-uploader.ps1" download>
+          <span className="material-symbols-outlined button-icon" aria-hidden="true">
+            download
+          </span>
+          下载上传程序
+        </a>
+        <button type="button" className="ghost-button" onClick={onRefresh} disabled={loading}>
+          {loading ? "刷新中..." : "手动刷新"}
+        </button>
+      </div>
     </section>
   )
 }

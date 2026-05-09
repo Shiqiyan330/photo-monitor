@@ -15,9 +15,10 @@ export function setStoredToken(token) {
 
 async function request(path, options = {}) {
   const token = getStoredToken()
+  const isFormData = options.body instanceof FormData
   const response = await fetch(`${BASE_URL}${path}`, {
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers ?? {}),
     },
@@ -98,6 +99,32 @@ export function fetchPhotos(station, department = "", options = {}) {
     params.set("cursor", String(options.cursor))
   }
   return request(`/photos?${params.toString()}`)
+}
+
+function uploadMultipart(path, { department, file }) {
+  const body = new FormData()
+  body.append("department", department)
+  body.append("file", file)
+  return request(path, {
+    method: "POST",
+    body,
+  })
+}
+
+export function uploadCompanyFile(payload) {
+  return uploadMultipart("/uploads/files", payload)
+}
+
+export function uploadLedger(payload) {
+  return uploadMultipart("/uploads/ledgers", payload)
+}
+
+export function fetchUploadedFiles() {
+  return request("/uploads/files")
+}
+
+export function fetchLedgers() {
+  return request("/uploads/ledgers")
 }
 
 export function fetchEmployees() {
