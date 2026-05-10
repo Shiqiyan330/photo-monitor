@@ -24,6 +24,9 @@ import {
   uploadCompanyFile,
   uploadLedger,
   uploadStudyArticle,
+  viewLedger,
+  viewStudyArticle,
+  viewUploadedFile,
 } from "./api"
 import ChangePasswordModal from "./components/ChangePasswordModal"
 import EmployeeManagerPage from "./components/EmployeeManagerPage"
@@ -489,7 +492,7 @@ function DocumentsPage({ onBack, user, departments, showBanner }) {
   }
 
   const handleView = async (item) => {
-    window.open(getAuthorizedUrl(item.url), "_blank", "noopener,noreferrer")
+    window.open(viewUploadedFile(item.id), "_blank", "noopener,noreferrer")
   }
 
   const handleDownload = async (item) => {
@@ -582,7 +585,7 @@ function LearningPage({ onBack, user, departments, showBanner }) {
   }
 
   const handleView = async (item) => {
-    window.open(getAuthorizedUrl(item.url), "_blank", "noopener,noreferrer")
+    window.open(viewStudyArticle(item.id), "_blank", "noopener,noreferrer")
   }
 
   const handleDownload = async (item) => {
@@ -687,7 +690,7 @@ function LedgerWorkspacePage({ onBack, user, departments, showBanner }) {
     if (!item.url) {
       return
     }
-    window.open(getAuthorizedUrl(item.url), "_blank", "noopener,noreferrer")
+    window.open(viewLedger(item.id), "_blank", "noopener,noreferrer")
   }
 
   const handleDownload = async (item) => {
@@ -810,8 +813,6 @@ function App() {
   const [photoLimit, setPhotoLimit] = useState(readInitialPhotoLimit)
   const [dedupeEnabled, setDedupeEnabled] = useState(readInitialDedupeEnabled)
   const [dedupeWindowSeconds, setDedupeWindowSeconds] = useState(readInitialDedupeWindow)
-  const [startDate, setStartDate] = useState("")
-  const [endDate, setEndDate] = useState("")
   const [selectedPhoto, setSelectedPhoto] = useState(null)
   const [loadingPhotos, setLoadingPhotos] = useState(false)
   const [loadingMorePhotos, setLoadingMorePhotos] = useState(false)
@@ -893,8 +894,6 @@ function App() {
       const data = await fetchPhotos(nextStation, "", {
         limit: initialLimit,
         cursor: 0,
-        startDate,
-        endDate,
       })
       setPhotos(data.items ?? data)
       setPhotoCursor(data.next_cursor ?? null)
@@ -930,8 +929,6 @@ function App() {
       const data = await fetchPhotos(station, "", {
         limit: pageSize,
         cursor: photoCursor,
-        startDate,
-        endDate,
       })
       setPhotos((current) => [...current, ...(data.items ?? data)])
       setPhotoCursor(data.next_cursor ?? null)
@@ -982,8 +979,6 @@ function App() {
       setPhotoTotal(0)
       setEmployees([])
       setDepartments([])
-      setStartDate("")
-      setEndDate("")
       setSelectedPhoto(null)
       return
     }
@@ -1002,7 +997,7 @@ function App() {
     }
 
     loadPhotos()
-  }, [station, startDate, endDate, user, hasPhotoAccess, currentPage])
+  }, [station, user, hasPhotoAccess, currentPage])
 
   useEffect(() => {
     if (!user || user.role !== "admin") {
@@ -1073,8 +1068,6 @@ function App() {
     const result = await login(username, password)
     setUser(result.user)
     setStation(DEFAULT_STATION)
-    setStartDate("")
-    setEndDate("")
     setPhotos([])
     setPhotoCursor(null)
     setPhotoTotal(0)
@@ -1090,8 +1083,6 @@ function App() {
     setPhotos([])
     setPhotoCursor(null)
     setPhotoTotal(0)
-    setStartDate("")
-    setEndDate("")
     setSelectedPhoto(null)
     setPasswordModalOpen(false)
     setCurrentPage(PAGE_DASHBOARD)
@@ -1287,10 +1278,6 @@ function App() {
             setDedupeEnabled={setDedupeEnabled}
             dedupeWindowSeconds={dedupeWindowSeconds}
             setDedupeWindowSeconds={(value) => setDedupeWindowSeconds(keepDigitsOnly(value))}
-            startDate={startDate}
-            setStartDate={setStartDate}
-            endDate={endDate}
-            setEndDate={setEndDate}
             onRefresh={() => loadPhotos(station)}
             loading={loadingPhotos}
           />

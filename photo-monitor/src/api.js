@@ -204,7 +204,9 @@ export function fetchUploadedFiles() {
 }
 
 export function viewUploadedFile(id) {
-  return `/uploads/files/${encodeURIComponent(id)}/view`
+  const token = getStoredToken()
+  const url = `/uploads/files/${encodeURIComponent(id)}/view`
+  return token ? `${url}?token=${encodeURIComponent(token)}` : url
 }
 
 export function fetchLedgers() {
@@ -212,7 +214,9 @@ export function fetchLedgers() {
 }
 
 export function viewLedger(id) {
-  return `/uploads/ledgers/${encodeURIComponent(id)}/view`
+  const token = getStoredToken()
+  const url = `/uploads/ledgers/${encodeURIComponent(id)}/view`
+  return token ? `${url}?token=${encodeURIComponent(token)}` : url
 }
 
 export function fetchStudyArticles() {
@@ -220,7 +224,9 @@ export function fetchStudyArticles() {
 }
 
 export function viewStudyArticle(id) {
-  return `/uploads/study-articles/${encodeURIComponent(id)}/view`
+  const token = getStoredToken()
+  const url = `/uploads/study-articles/${encodeURIComponent(id)}/view`
+  return token ? `${url}?token=${encodeURIComponent(token)}` : url
 }
 
 export function deleteCompanyFile(id) {

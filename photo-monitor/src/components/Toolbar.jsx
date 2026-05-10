@@ -12,10 +12,6 @@ export default function Toolbar({
   setDedupeEnabled,
   dedupeWindowSeconds,
   setDedupeWindowSeconds,
-  startDate,
-  setStartDate,
-  endDate,
-  setEndDate,
   onRefresh,
   loading,
 }) {
@@ -34,24 +30,6 @@ export default function Toolbar({
             </button>
           ))}
         </div>
-
-        <label className="toolbar-select">
-          <span>开始时间</span>
-          <input
-            type="datetime-local"
-            value={startDate}
-            onChange={(event) => setStartDate(event.target.value)}
-          />
-        </label>
-
-        <label className="toolbar-select">
-          <span>结束时间</span>
-          <input
-            type="datetime-local"
-            value={endDate}
-            onChange={(event) => setEndDate(event.target.value)}
-          />
-        </label>
 
         <label className="toolbar-select">
           <span>展示数量</span>

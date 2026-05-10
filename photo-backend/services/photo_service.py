@@ -4,10 +4,7 @@ from pathlib import Path
 
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 PHOTO_DATE_PATTERNS = (
-    re.compile(r"(?<!\d)(20\d{2})[_-](\d{2})[_-](\d{2})[_-](\d{2})[_-](\d{2})[_-](\d{2})(?!\d)"),
-    re.compile(r"(?<!\d)(20\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?!\d)"),
-    re.compile(r"(?<!\d)(20\d{2})[_-](\d{2})[_-](\d{2})(?!\d)"),
-    re.compile(r"(?<!\d)(20\d{2})(\d{2})(\d{2})(?!\d)"),
+    re.compile(r"_(20\d{12})\d*_"),
 )
 
 
@@ -17,8 +14,15 @@ def extract_photo_datetime_from_name(filename: str) -> datetime | None:
         if not match:
             continue
         try:
-            values = [int(match.group(index)) for index in range(1, len(match.groups()) + 1)]
-            return datetime(*values)
+            raw = match.group(1)
+            return datetime(
+                int(raw[0:4]),
+                int(raw[4:6]),
+                int(raw[6:8]),
+                int(raw[8:10]),
+                int(raw[10:12]),
+                int(raw[12:14]),
+            )
         except ValueError:
             continue
     return None

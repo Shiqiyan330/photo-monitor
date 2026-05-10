@@ -1,5 +1,10 @@
 import { getAssetUrl } from "../api"
 
+function formatPhotoTime(photo) {
+  const value = photo.actual_time ?? photo.time
+  return value ? new Date(value * 1000).toLocaleString() : ""
+}
+
 export default function PhotoModal({ photo, onClose }) {
   if (!photo) return null
 
@@ -18,7 +23,7 @@ export default function PhotoModal({ photo, onClose }) {
 
         <div className="modal-caption">
           <div>{photo.name}</div>
-          <div>{new Date(photo.time * 1000).toLocaleString()}</div>
+          <div>{formatPhotoTime(photo)}</div>
         </div>
       </div>
     </div>
