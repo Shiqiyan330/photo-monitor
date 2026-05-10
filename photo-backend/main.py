@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from routers import admin, auth, photo, upload, ws
+from services.photo_cleanup_service import start_photo_cleanup_scheduler
 from services.watcher_service import start_watch
 
 BASE_DIR = Path(__file__).resolve().parent / "photos"
@@ -33,6 +34,7 @@ def run_watch():
 
 
 threading.Thread(target=run_watch, daemon=True).start()
+start_photo_cleanup_scheduler(BASE_DIR)
 
 app.mount("/static", StaticFiles(directory=BASE_DIR), name="static")
 OFFICE_DATA_DIR.mkdir(parents=True, exist_ok=True)

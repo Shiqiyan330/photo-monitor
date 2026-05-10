@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import FileResponse
 from PIL import Image
 
@@ -31,6 +31,8 @@ def get_photos(
     department: str | None = None,
     limit: int = 24,
     cursor: int = 0,
+    start_date: str | None = Query(default=None),
+    end_date: str | None = Query(default=None),
     user=Depends(require_camera_access),
 ):
     normalized_department = (department or "").strip()
@@ -46,6 +48,8 @@ def get_photos(
         station,
         department=normalized_department or None,
         allowed_departments=None if user["role"] == "admin" else accessible_departments,
+        start_date=start_date,
+        end_date=end_date,
     )
     next_cursor = normalized_cursor + normalized_limit
 

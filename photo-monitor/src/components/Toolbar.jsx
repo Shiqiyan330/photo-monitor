@@ -1,4 +1,4 @@
-const STATIONS = [
+﻿const STATIONS = [
   { value: "xiazhan", label: "下站" },
   { value: "shangzhan", label: "上站" },
 ]
@@ -12,10 +12,10 @@ export default function Toolbar({
   setDedupeEnabled,
   dedupeWindowSeconds,
   setDedupeWindowSeconds,
-  departmentOptions,
-  selectedDepartment,
-  setSelectedDepartment,
-  showDepartmentSwitch,
+  startDate,
+  setStartDate,
+  endDate,
+  setEndDate,
   onRefresh,
   loading,
 }) {
@@ -34,6 +34,16 @@ export default function Toolbar({
             </button>
           ))}
         </div>
+
+        <label className="toolbar-select">
+          <span>开始日期</span>
+          <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+        </label>
+
+        <label className="toolbar-select">
+          <span>结束日期</span>
+          <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+        </label>
 
         <label className="toolbar-select">
           <span>展示数量</span>
@@ -70,19 +80,6 @@ export default function Toolbar({
               />
               <span>秒</span>
             </div>
-          </label>
-        ) : null}
-
-        {showDepartmentSwitch ? (
-          <label className="toolbar-select">
-            <span>部门切换</span>
-            <select value={selectedDepartment} onChange={(event) => setSelectedDepartment(event.target.value)}>
-              {departmentOptions.map((item) => (
-                <option key={item} value={item}>
-                  {item || "全部部门"}
-                </option>
-              ))}
-            </select>
           </label>
         ) : null}
       </div>

@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
@@ -9,8 +9,8 @@ import jwt
 from jwt import InvalidTokenError
 
 
-DEFAULT_PERMISSIONS = ["study", "upload", "structure"]
-ADMIN_PERMISSIONS = ["camera", "files", "study", "upload", "structure", "cross_dept_files"]
+DEFAULT_PERMISSIONS = ["study_view", "upload", "structure"]
+ADMIN_PERMISSIONS = ["camera_all_departments", "camera", "photo_all_departments", "study_view", "study_edit", "upload", "ledger_view", "structure", "cross_dept_files"]
 DEPARTMENT_PERMISSION_PREFIX = "dept_"
 JWT_SECRET = "photo-monitor-jwt-secret"
 JWT_ALGORITHM = "HS256"
@@ -246,12 +246,19 @@ class EmployeeSystem:
         if isinstance(permissions, str):
             permissions = [item.strip() for item in permissions.split(",") if item.strip()]
 
+        alias_map = {
+            "files": "photo_all_departments",
+            "study": "study_view",
+            "ledger": "ledger_view",
+            "photos": "camera",
+        }
         normalized_permissions = []
         for permission in permissions:
             if not isinstance(permission, str):
                 continue
 
             cleaned = permission.strip()
+            cleaned = alias_map.get(cleaned, cleaned)
             if cleaned.startswith(DEPARTMENT_PERMISSION_PREFIX):
                 cleaned = build_department_permission(cleaned[len(DEPARTMENT_PERMISSION_PREFIX) :])
 

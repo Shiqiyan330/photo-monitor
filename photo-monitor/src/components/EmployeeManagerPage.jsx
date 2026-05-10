@@ -2,8 +2,11 @@ import { useMemo, useState } from "react"
 
 const FEATURE_PERMISSION_OPTIONS = [
   { value: "camera", label: "监控查看" },
-  { value: "files", label: "公司文件" },
-  { value: "study", label: "学习交流" },
+  { value: "camera_all_departments", label: "全部门照片" },
+  { value: "photo_all_departments", label: "公司文件" },
+  { value: "study_view", label: "学习交流查看" },
+  { value: "study_edit", label: "学习交流上传/删除" },
+  { value: "ledger_view", label: "台账查看" },
   { value: "upload", label: "台账上传" },
   { value: "structure", label: "公司架构" },
   { value: "cross_dept_files", label: "跨部门文件" },
@@ -17,7 +20,7 @@ const EMPTY_FORM = {
   department: "",
   position: "",
   rank: "",
-  permissions: ["camera", "files", "study", "upload"],
+  permissions: ["camera", "study_view", "ledger_view", "upload"],
 }
 
 function buildDepartmentPermission(department) {
@@ -104,7 +107,7 @@ export default function EmployeeManagerPage({
     setEditingUsername(employee.username)
     setForm({
       username: employee.username,
-      password: "",
+      password: employee.password ?? "",
       phone: employee.phone ?? "",
       name: employee.name ?? "",
       department: employee.department ?? "",
@@ -221,6 +224,7 @@ export default function EmployeeManagerPage({
               <label className="field">
                 <span>密码</span>
                 <input
+                  type="text"
                   value={form.password}
                   onChange={(event) => handleChange("password", event.target.value)}
                   placeholder={editingUsername ? "留空表示不修改密码" : "不填写则默认与手机号相同"}

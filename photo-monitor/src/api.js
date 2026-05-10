@@ -75,6 +75,12 @@ export function getAssetUrl(path) {
   return path
 }
 
+export function getAuthorizedUrl(path) {
+  const token = getStoredToken()
+  const separator = path.includes("?") ? "&" : "?"
+  return token ? `${getAssetUrl(path)}${separator}token=${encodeURIComponent(token)}` : getAssetUrl(path)
+}
+
 export function getWebSocketUrl() {
   const token = encodeURIComponent(getStoredToken())
   const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
@@ -122,6 +128,12 @@ export function fetchPhotos(station, department = "", options = {}) {
   }
   if (options.cursor != null) {
     params.set("cursor", String(options.cursor))
+  }
+  if (options.startDate) {
+    params.set("start_date", options.startDate)
+  }
+  if (options.endDate) {
+    params.set("end_date", options.endDate)
   }
   return request(`/photos?${params.toString()}`)
 }
@@ -191,12 +203,24 @@ export function fetchUploadedFiles() {
   return request("/uploads/files")
 }
 
+export function viewUploadedFile(id) {
+  return `/uploads/files/${encodeURIComponent(id)}/view`
+}
+
 export function fetchLedgers() {
   return request("/uploads/ledgers")
 }
 
+export function viewLedger(id) {
+  return `/uploads/ledgers/${encodeURIComponent(id)}/view`
+}
+
 export function fetchStudyArticles() {
   return request("/uploads/study-articles")
+}
+
+export function viewStudyArticle(id) {
+  return `/uploads/study-articles/${encodeURIComponent(id)}/view`
 }
 
 export function deleteCompanyFile(id) {

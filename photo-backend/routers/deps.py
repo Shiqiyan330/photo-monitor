@@ -1,4 +1,4 @@
-from fastapi import Depends, Header, HTTPException, Query
+﻿from fastapi import Depends, Header, HTTPException, Query
 
 from services.auth_service import employee_system
 
@@ -21,26 +21,44 @@ def require_login(authorization: str | None = Header(default=None)) -> dict:
 
 
 def require_camera_access(user: dict = Depends(require_login)) -> dict:
-    if user["role"] != "admin" and "camera" not in user["permissions"]:
-        raise HTTPException(status_code=403, detail="当前账号没有监控拍照权限")
+    permissions = set(user.get("permissions") or [])
+    if user["role"] != "admin" and "camera" not in permissions and "camera_all_departments" not in permissions:
+        raise HTTPException(status_code=403, detail="当前账号没有监控照片权限")
     return user
 
 
 def require_upload_access(user: dict = Depends(require_login)) -> dict:
-    if user["role"] != "admin" and "upload" not in user["permissions"]:
+    permissions = set(user.get("permissions") or [])
+    if user["role"] != "admin" and "upload" not in permissions:
         raise HTTPException(status_code=403, detail="No permission to upload")
     return user
 
 
 def require_file_access(user: dict = Depends(require_login)) -> dict:
-    if user["role"] != "admin" and "files" not in user["permissions"] and "upload" not in user["permissions"]:
+    permissions = set(user.get("permissions") or [])
+    if user["role"] != "admin" and "photo_all_departments" not in permissions and "camera" not in permissions:
         raise HTTPException(status_code=403, detail="No permission to access files")
     return user
 
 
 def require_study_access(user: dict = Depends(require_login)) -> dict:
-    if user["role"] != "admin" and "study" not in user["permissions"]:
+    permissions = set(user.get("permissions") or [])
+    if user["role"] != "admin" and "study_view" not in permissions and "study_edit" not in permissions:
         raise HTTPException(status_code=403, detail="No permission to access study articles")
+    return user
+
+
+def require_study_edit_access(user: dict = Depends(require_login)) -> dict:
+    permissions = set(user.get("permissions") or [])
+    if user["role"] != "admin" and "study_edit" not in permissions:
+        raise HTTPException(status_code=403, detail="No permission to edit study articles")
+    return user
+
+
+def require_ledger_access(user: dict = Depends(require_login)) -> dict:
+    permissions = set(user.get("permissions") or [])
+    if user["role"] != "admin" and "ledger_view" not in permissions and "upload" not in permissions:
+        raise HTTPException(status_code=403, detail="No permission to access ledgers")
     return user
 
 

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+﻿import { useEffect, useRef, useState } from "react"
 import {
   changePassword,
   createEmployee,
@@ -7,6 +7,7 @@ import {
   deleteLedger,
   deleteStudyArticle,
   downloadFile,
+  getAuthorizedUrl,
   fetchLedgers,
   fetchCurrentUser,
   fetchEmployees,
@@ -58,7 +59,7 @@ const MODULES = [
   },
   {
     key: PAGE_DOCUMENTS,
-    permission: "files",
+    permission: "photo_all_departments",
     title: "公司文件",
     description: "公司文档资料库",
     accent: "green",
@@ -66,16 +67,16 @@ const MODULES = [
   },
   {
     key: PAGE_LEARNING,
-    permission: "study",
+    permission: "study_view",
     title: "学习交流",
-    description: "在线学习与文字讨论",
+    description: "在线学习与文档交流",
     accent: "orange",
     icon: "menu_book",
   },
   {
     key: PAGE_LEDGER,
-    permission: "upload",
-    title: "台账上传",
+    permission: "ledger_view",
+    title: "台账管理",
     description: "工作台账上传与管理",
     accent: "teal",
     icon: "upload_file",
@@ -84,7 +85,7 @@ const MODULES = [
     key: PAGE_STRUCTURE,
     permission: "structure",
     title: "公司架构",
-    description: "组织架构与人员联系方式",
+    description: "组织架构与人员联系",
     accent: "purple",
     icon: "account_tree",
   },
@@ -223,8 +224,8 @@ function BrandMark({ compact = false }) {
         <span>Logo</span>
       </div>
       <div>
-        <div className="brand-name">越岚索道</div>
-        {!compact ? <div className="brand-subtitle">办公管理系统</div> : null}
+        <div className="brand-name">瓒婂矚绱㈤亾</div>
+        {!compact ? <div className="brand-subtitle">鍔炲叕绠＄悊绯荤粺</div> : null}
       </div>
     </div>
   )
@@ -238,27 +239,26 @@ function DashboardPage({ user, modules, onOpenModule, onOpenEmployees, onOpenPas
           <BrandMark />
           <p className="eyebrow">Main Dashboard</p>
           <h1>办公管理主界面</h1>
-          <p className="hero-copy">根据账号权限展示可用功能，进入对应模块处理监控、文件、学习、台账和组织信息。</p>
+          <p className="hero-copy">根据账号权限展示可用功能，进入对应模块处理监控、文档、学习、台账和组织信息。</p>
         </div>
 
         <div className="user-panel">
           <div className="user-avatar">{user.avatar}</div>
           <div className="user-name">{user.name}</div>
           <div className="user-meta">
-            {user.role === "admin" ? "管理员" : user.department || "员工"} · {user.username}
+            {(user.role === "admin" ? "管理员" : user.department || "员工") + " / " + user.username}
           </div>
           <div className="user-actions">
             <button type="button" className="ghost-button" onClick={onOpenPassword}>
-              修改密码
+              淇敼瀵嗙爜
             </button>
             {user.role === "admin" ? (
               <button type="button" className="ghost-button" onClick={onOpenEmployees}>
-                员工管理
+                鍛樺伐绠＄悊
               </button>
             ) : null}
             <button type="button" className="ghost-button" onClick={onLogout}>
-              退出登录
-            </button>
+              閫€鍑虹櫥褰?            </button>
           </div>
         </div>
       </section>
@@ -300,8 +300,7 @@ function OfficeModulePage({ title, children, onBack }) {
           <h2>{title}</h2>
         </div>
         <button type="button" className="ghost-button" onClick={onBack}>
-          返回主界面
-        </button>
+          杩斿洖涓荤晫闈?        </button>
       </section>
       {children}
     </div>
@@ -341,6 +340,10 @@ function DocumentsPage({ onBack, user, departments, showBanner }) {
     } finally {
       setUploading(false)
     }
+  }
+
+  const handleView = async (item) => {
+    window.open(getAuthorizedUrl(item.url), "_blank", "noopener,noreferrer")
   }
 
   const handleDownload = async (item) => {
@@ -385,7 +388,14 @@ function DocumentsPage({ onBack, user, departments, showBanner }) {
         </div>
       </section>
 
-      <UploadList title="公司文件列表" items={files} emptyText="还没有上传公司文件。" onDelete={handleDelete} onDownload={handleDownload} />
+      <UploadList
+        title="公司文件列表"
+        items={files}
+        emptyText="还没有上传公司文件。"
+        onDelete={handleDelete}
+        onDownload={handleDownload}
+        onView={handleView}
+      />
     </OfficeModulePage>
   )
 }
@@ -423,6 +433,10 @@ function LearningPage({ onBack, user, departments, showBanner }) {
     } finally {
       setUploading(false)
     }
+  }
+
+  const handleView = async (item) => {
+    window.open(getAuthorizedUrl(item.url), "_blank", "noopener,noreferrer")
   }
 
   const handleDownload = async (item) => {
@@ -467,291 +481,15 @@ function LearningPage({ onBack, user, departments, showBanner }) {
         </div>
       </section>
 
-      <UploadList title="学习文章列表" items={articles} emptyText="还没有上传学习文章。" onDelete={handleDelete} onDownload={handleDownload} />
+      <UploadList
+        title="学习文章列表"
+        items={articles}
+        emptyText="还没有上传学习文章。"
+        onDelete={handleDelete}
+        onDownload={handleDownload}
+        onView={handleView}
+      />
     </OfficeModulePage>
-  )
-}
-
-function LedgerPage({ onBack }) {
-  return (
-    <OfficeModulePage title="台账上传" onBack={onBack}>
-      <section className="office-panel">
-        <h3>台账上传</h3>
-        <p className="panel-muted">这里将承载工作台账上传、列表查看和管理流程。</p>
-        <button type="button" className="primary-action-button icon-button-text">
-          <span className="material-symbols-outlined button-icon" aria-hidden="true">
-            upload_file
-          </span>
-          上传台账
-        </button>
-      </section>
-    </OfficeModulePage>
-  )
-}
-
-function AutoUploaderPage({ onBack, user }) {
-  const serverOrigin = window.location.origin
-  const defaultDepartment = user?.department || "部门名"
-  const loginCommand = `powershell -ExecutionPolicy Bypass -File .\\photo-monitor-uploader.ps1 login -Server ${serverOrigin} -Username ${user?.username || "用户名"} -WatchDir "D:\\待上传目录" -Department ${defaultDepartment} -Station uploads -IntervalSeconds 60`
-
-  return (
-    <OfficeModulePage title="台账上传" onBack={onBack}>
-      <section className="uploader-hero">
-        <div>
-          <p className="eyebrow">Local Auto Uploader</p>
-          <h3>自动上传工具</h3>
-          <p className="panel-muted">
-            下载 PowerShell 脚本后，在本地登录一次即可隐藏到后台运行。程序会定时检查固定目录，并按账号部门权限上传新增文件。
-          </p>
-        </div>
-        <a className="primary-action-button icon-button-text" href="/downloads/photo-monitor-uploader.ps1" download>
-          <span className="material-symbols-outlined button-icon" aria-hidden="true">
-            download
-          </span>
-          下载上传脚本
-        </a>
-      </section>
-
-      <section className="uploader-layout">
-        <div className="office-panel uploader-guide">
-          <div className="panel-header">
-            <div>
-              <h3>配置步骤</h3>
-              <p className="panel-muted">推荐先在前台测试一次，确认上传成功后再切到后台运行。</p>
-            </div>
-          </div>
-
-          <ol className="setup-steps">
-            <li>
-              <span className="step-index">1</span>
-              <div>
-                <strong>保存脚本</strong>
-                <p>
-                  把下载的 <code>photo-monitor-uploader.ps1</code> 放到本地固定目录，例如桌面或{" "}
-                  <code>D:\PhotoUploader</code>。
-                </p>
-              </div>
-            </li>
-            <li>
-              <span className="step-index">2</span>
-              <div>
-                <strong>登录并绑定扫描目录</strong>
-                <p>在 PowerShell 中执行登录命令，按提示输入密码。部门必须是当前账号有上传权限的部门。</p>
-              </div>
-            </li>
-            <li>
-              <span className="step-index">3</span>
-              <div>
-                <strong>测试上传</strong>
-                <p>
-                  执行 <code>once</code> 扫描一次，确认日志显示 uploaded 后再进入后台模式。
-                </p>
-              </div>
-            </li>
-            <li>
-              <span className="step-index">4</span>
-              <div>
-                <strong>后台运行</strong>
-                <p>
-                  执行 <code>start-hidden</code> 后窗口会隐藏，程序每隔配置时间扫描一次目录。
-                </p>
-              </div>
-            </li>
-          </ol>
-        </div>
-
-        <div className="office-panel uploader-commands">
-          <h3>命令示例</h3>
-          <label className="command-block">
-            <span>首次登录</span>
-            <code>{loginCommand}</code>
-          </label>
-          <label className="command-block">
-            <span>扫描一次</span>
-            <code>powershell -ExecutionPolicy Bypass -File .\photo-monitor-uploader.ps1 once</code>
-          </label>
-          <label className="command-block">
-            <span>隐藏后台运行</span>
-            <code>powershell -ExecutionPolicy Bypass -File .\photo-monitor-uploader.ps1 start-hidden</code>
-          </label>
-          <label className="command-block">
-            <span>开机自启</span>
-            <code>powershell -ExecutionPolicy Bypass -File .\photo-monitor-uploader.ps1 install-startup</code>
-          </label>
-          <label className="command-block">
-            <span>查看状态和日志位置</span>
-            <code>powershell -ExecutionPolicy Bypass -File .\photo-monitor-uploader.ps1 status</code>
-          </label>
-        </div>
-      </section>
-    </OfficeModulePage>
-  )
-}
-
-function formatFileSize(size) {
-  if (!Number.isFinite(size)) {
-    return "-"
-  }
-  if (size >= 1024 * 1024) {
-    return `${(size / 1024 / 1024).toFixed(1)} MB`
-  }
-  if (size >= 1024) {
-    return `${(size / 1024).toFixed(1)} KB`
-  }
-  return `${size} B`
-}
-
-function UploadPanel({ title, description, departmentOptions, onSubmit, submitting }) {
-  const [department, setDepartment] = useState(departmentOptions[0] || "")
-  const [file, setFile] = useState(null)
-  const [dragActive, setDragActive] = useState(false)
-  const [progress, setProgress] = useState(0)
-
-  useEffect(() => {
-    if (!departmentOptions.includes(department)) {
-      setDepartment(departmentOptions[0] || "")
-    }
-  }, [departmentOptions, department])
-
-  const handleSubmit = async (event) => {
-    event.preventDefault()
-    if (!file || !department) {
-      return
-    }
-    setProgress(0)
-    try {
-      await onSubmit({ department, file }, { onProgress: setProgress })
-      event.currentTarget.reset()
-      setFile(null)
-      setProgress(0)
-    } catch (error) {
-      setProgress(0)
-      throw error
-    }
-  }
-
-  const selectFile = (nextFile) => {
-    if (!nextFile || submitting) {
-      return
-    }
-    setFile(nextFile)
-    setProgress(0)
-  }
-
-  const handleDrag = (event) => {
-    event.preventDefault()
-    event.stopPropagation()
-    if (submitting) {
-      return
-    }
-    setDragActive(event.type === "dragenter" || event.type === "dragover")
-  }
-
-  const handleDrop = (event) => {
-    event.preventDefault()
-    event.stopPropagation()
-    setDragActive(false)
-    selectFile(event.dataTransfer.files?.[0] ?? null)
-  }
-
-  return (
-    <form className="upload-form" onSubmit={handleSubmit} onDragEnter={handleDrag}>
-      <div>
-        <h3>{title}</h3>
-        <p className="panel-muted">{description}</p>
-      </div>
-
-      <label className="toolbar-select">
-        <span>上传部门</span>
-        <select value={department} onChange={(event) => setDepartment(event.target.value)} required>
-          {departmentOptions.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label
-        className={dragActive ? "file-drop-zone active" : "file-drop-zone"}
-        onDragEnter={handleDrag}
-        onDragOver={handleDrag}
-        onDragLeave={handleDrag}
-        onDrop={handleDrop}
-      >
-        <span className="material-symbols-outlined file-drop-icon" aria-hidden="true">
-          upload_file
-        </span>
-        <span className="file-drop-title">{file ? file.name : "拖入文件或点击选择"}</span>
-        <span className="file-drop-meta">{file ? formatFileSize(file.size) : "支持单文件上传"}</span>
-        <input
-          type="file"
-          onChange={(event) => selectFile(event.target.files?.[0] ?? null)}
-          required
-          disabled={submitting}
-        />
-      </label>
-
-      {submitting ? (
-        <div className="upload-progress" aria-label={`上传进度 ${progress}%`}>
-          <div className="upload-progress-track">
-            <span style={{ width: `${progress}%` }} />
-          </div>
-          <span>{progress}%</span>
-        </div>
-      ) : null}
-
-      <button type="submit" className="primary-action-button icon-button-text" disabled={submitting || !file || !department}>
-        <span className="material-symbols-outlined button-icon" aria-hidden="true">
-          upload_file
-        </span>
-        {submitting ? "上传中..." : "上传"}
-      </button>
-    </form>
-  )
-}
-
-function UploadList({ title, items, emptyText, onDelete, onDownload }) {
-  return (
-    <section className="office-table upload-list">
-      <div className="panel-header upload-list-header">
-        <h3>{title}</h3>
-        <span className="panel-muted">共 {items.length} 条</span>
-      </div>
-      <div className="upload-table-row upload-table-head">
-        <span>文件名</span>
-        <span>部门</span>
-        <span>大小</span>
-        <span>上传时间</span>
-        <span>上传人</span>
-        <span>下载</span>
-        <span>删除</span>
-      </div>
-      {items.length ? (
-        items.map((item) => (
-          <div key={item.path} className="upload-table-row">
-            <span className="upload-file-name">{item.name}</span>
-            <span>{item.department}</span>
-            <span>{formatFileSize(item.size)}</span>
-            <span>{item.time ? new Date(item.time * 1000).toLocaleString() : "-"}</span>
-            <span>{item.uploaded_by || "-"}</span>
-            <button type="button" className="ghost-button compact-button" onClick={() => onDownload(item)}>
-              下载
-            </button>
-            <button
-              type="button"
-              className="ghost-button compact-button"
-              onClick={() => onDelete(item)}
-              disabled={!item.id}
-            >
-              删除
-            </button>
-          </div>
-        ))
-      ) : (
-        <div className="empty-state">{emptyText}</div>
-      )}
-    </section>
   )
 }
 
@@ -799,6 +537,13 @@ function LedgerWorkspacePage({ onBack, user, departments, showBanner }) {
     await loadLists()
   }
 
+  const handleView = async (item) => {
+    if (!item.url) {
+      return
+    }
+    window.open(getAuthorizedUrl(item.url), "_blank", "noopener,noreferrer")
+  }
+
   const handleDownload = async (item) => {
     if (!item.url) {
       return
@@ -841,11 +586,11 @@ function LedgerWorkspacePage({ onBack, user, departments, showBanner }) {
         emptyText="还没有上传台账。"
         onDelete={handleDeleteLedger}
         onDownload={handleDownload}
+        onView={handleView}
       />
     </OfficeModulePage>
   )
 }
-
 function StructurePage({ onBack, user, employees }) {
   const [collapsedDepartments, setCollapsedDepartments] = useState(new Set())
   const visibleEmployees = user.role === "admin" ? employees : [user]
@@ -908,7 +653,6 @@ function StructurePage({ onBack, user, employees }) {
     </OfficeModulePage>
   )
 }
-
 function App() {
   const [user, setUser] = useState(null)
   const [booting, setBooting] = useState(true)
@@ -920,7 +664,8 @@ function App() {
   const [photoLimit, setPhotoLimit] = useState(readInitialPhotoLimit)
   const [dedupeEnabled, setDedupeEnabled] = useState(readInitialDedupeEnabled)
   const [dedupeWindowSeconds, setDedupeWindowSeconds] = useState(readInitialDedupeWindow)
-  const [selectedDepartment, setSelectedDepartment] = useState("")
+  const [startDate, setStartDate] = useState("")
+  const [endDate, setEndDate] = useState("")
   const [selectedPhoto, setSelectedPhoto] = useState(null)
   const [loadingPhotos, setLoadingPhotos] = useState(false)
   const [loadingMorePhotos, setLoadingMorePhotos] = useState(false)
@@ -934,8 +679,6 @@ function App() {
   const bannerTimerRef = useRef(0)
 
   const hasPhotoAccess = hasCameraPermission(user)
-  const departmentViewOptions = getDepartmentViewOptions(user, departments)
-  const departmentViewKey = departmentViewOptions.join("|")
   const parsedPhotoLimit = parsePositiveInteger(photoLimit)
   const parsedDedupeWindow =
     parsePositiveInteger(dedupeWindowSeconds) ??
@@ -983,7 +726,7 @@ function App() {
     }
   }
 
-  const loadPhotos = async (nextStation = station, nextDepartment = selectedDepartment) => {
+  const loadPhotos = async (nextStation = station) => {
     if (!hasPhotoAccess) {
       setPhotos([])
       setPhotoCursor(null)
@@ -1001,9 +744,11 @@ function App() {
       const initialLimit = parsedPhotoLimit
         ? Math.min(getPhotoFeedBatchSize(), parsedPhotoLimit)
         : getPhotoFeedBatchSize()
-      const data = await fetchPhotos(nextStation, nextDepartment, {
+      const data = await fetchPhotos(nextStation, "", {
         limit: initialLimit,
         cursor: 0,
+        startDate,
+        endDate,
       })
       setPhotos(data.items ?? data)
       setPhotoCursor(data.next_cursor ?? null)
@@ -1036,9 +781,11 @@ function App() {
     setPhotoError("")
 
     try {
-      const data = await fetchPhotos(station, selectedDepartment, {
+      const data = await fetchPhotos(station, "", {
         limit: pageSize,
         cursor: photoCursor,
+        startDate,
+        endDate,
       })
       setPhotos((current) => [...current, ...(data.items ?? data)])
       setPhotoCursor(data.next_cursor ?? null)
@@ -1089,7 +836,8 @@ function App() {
       setPhotoTotal(0)
       setEmployees([])
       setDepartments([])
-      setSelectedDepartment("")
+      setStartDate("")
+      setEndDate("")
       setSelectedPhoto(null)
       return
     }
@@ -1108,7 +856,7 @@ function App() {
     }
 
     loadPhotos()
-  }, [station, selectedDepartment, user, hasPhotoAccess, currentPage])
+  }, [station, startDate, endDate, user, hasPhotoAccess, currentPage])
 
   useEffect(() => {
     if (!user || user.role !== "admin") {
@@ -1175,24 +923,12 @@ function App() {
     return () => window.clearTimeout(bannerTimerRef.current)
   }, [])
 
-  useEffect(() => {
-    if (!departmentViewOptions.length) {
-      if (selectedDepartment) {
-        setSelectedDepartment("")
-      }
-      return
-    }
-
-    if (!departmentViewOptions.includes(selectedDepartment)) {
-      setSelectedDepartment(departmentViewOptions[0])
-    }
-  }, [departmentViewKey, selectedDepartment])
-
   const handleLogin = async ({ username, password }) => {
     const result = await login(username, password)
     setUser(result.user)
     setStation(DEFAULT_STATION)
-    setSelectedDepartment("")
+    setStartDate("")
+    setEndDate("")
     setPhotos([])
     setPhotoCursor(null)
     setPhotoTotal(0)
@@ -1208,7 +944,8 @@ function App() {
     setPhotos([])
     setPhotoCursor(null)
     setPhotoTotal(0)
-    setSelectedDepartment("")
+    setStartDate("")
+    setEndDate("")
     setSelectedPhoto(null)
     setPasswordModalOpen(false)
     setCurrentPage(PAGE_DASHBOARD)
@@ -1218,7 +955,7 @@ function App() {
   const handleChangePassword = async ({ oldPassword, newPassword }) => {
     const result = await changePassword(oldPassword, newPassword)
     setUser(result.user)
-    showBanner("密码修改成功")
+    showBanner("瀵嗙爜淇敼鎴愬姛")
   }
 
   const handleCreateEmployee = async (payload) => {
@@ -1262,7 +999,7 @@ function App() {
   if (booting) {
     return (
       <div className="app-shell">
-        <div className="status-card">正在恢复登录状态...</div>
+        <div className="status-card">姝ｅ湪鎭㈠鐧诲綍鐘舵€?..</div>
       </div>
     )
   }
@@ -1323,7 +1060,7 @@ function App() {
     )
   }
 
-  if (currentPage === PAGE_DOCUMENTS && hasPermission(user, "files")) {
+  if (currentPage === PAGE_DOCUMENTS && hasPermission(user, "photo_all_departments")) {
     return (
       <div className="app-shell office-page-shell">
         <DocumentsPage user={user} departments={departments} showBanner={showBanner} onBack={openDashboardPage} />
@@ -1331,7 +1068,7 @@ function App() {
     )
   }
 
-  if (currentPage === PAGE_LEARNING && hasPermission(user, "study")) {
+  if (currentPage === PAGE_LEARNING && hasPermission(user, "study_view")) {
     return (
       <div className="app-shell office-page-shell">
         <LearningPage user={user} departments={departments} showBanner={showBanner} onBack={openDashboardPage} />
@@ -1339,7 +1076,7 @@ function App() {
     )
   }
 
-  if (currentPage === PAGE_LEDGER && hasPermission(user, "upload")) {
+  if (currentPage === PAGE_LEDGER && hasPermission(user, "ledger_view")) {
     return (
       <div className="app-shell office-page-shell">
         <LedgerWorkspacePage user={user} departments={departments} showBanner={showBanner} onBack={openDashboardPage} />
@@ -1362,16 +1099,15 @@ function App() {
           <BrandMark compact />
           <p className="eyebrow">Photo Monitor</p>
           <h1>员工监控照片工作台</h1>
-          <p className="hero-copy">
-            现在支持按站点查看照片、控制展示数量，并在前端按秒级时间窗进行去重展示。
-          </p>
+          <p className="hero-copy">支持按站点和时间段查看照片，控制展示数量，并按秒级时间窗去重展示。</p>
+
         </div>
 
         <div className="user-panel">
           <div className="user-avatar">{user.avatar}</div>
           <div className="user-name">{user.name}</div>
           <div className="user-meta">
-            {user.role === "admin" ? "管理员" : user.department || "员工"} · {user.username}
+            {(user.role === "admin" ? "管理员" : user.department || "员工") + " / " + user.username}
           </div>
           <div className="user-actions">
             <button type="button" className="ghost-button" onClick={openDashboardPage}>
@@ -1405,11 +1141,11 @@ function App() {
             setDedupeEnabled={setDedupeEnabled}
             dedupeWindowSeconds={dedupeWindowSeconds}
             setDedupeWindowSeconds={(value) => setDedupeWindowSeconds(keepDigitsOnly(value))}
-          departmentOptions={departmentViewOptions}
-          selectedDepartment={selectedDepartment}
-          setSelectedDepartment={setSelectedDepartment}
-            showDepartmentSwitch={departmentViewOptions.length > 1}
-            onRefresh={() => loadPhotos(station, selectedDepartment)}
+            startDate={startDate}
+            setStartDate={setStartDate}
+            endDate={endDate}
+            setEndDate={setEndDate}
+            onRefresh={() => loadPhotos(station)}
             loading={loadingPhotos}
           />
 
@@ -1431,8 +1167,7 @@ function App() {
         </>
       ) : (
         <div className="status-card">
-          当前账号没有监控查看权限，监控站点、展示去重和部门切换区域已自动隐藏。
-        </div>
+          褰撳墠璐﹀彿娌℃湁鐩戞帶鏌ョ湅鏉冮檺锛岀洃鎺х珯鐐广€佸睍绀哄幓閲嶅拰閮ㄩ棬鍒囨崲鍖哄煙宸茶嚜鍔ㄩ殣钘忋€?        </div>
       )}
 
       <PhotoModal photo={selectedPhoto} onClose={() => setSelectedPhoto(null)} />
