@@ -8,8 +8,6 @@
   [string]$Password = "admin",
   [string]$Department = "",
   [string]$Station = "uploads",
-  [ValidateSet("photo", "files", "ledgers")]
-  [string]$Target = "photo",
   [string]$WatchDir = "C:\Users\QiyanShi\Desktop\photo-monitor\photo-backend\",
   [int]$IntervalSeconds = 60,
   [int]$StableSeconds = 10,
@@ -23,8 +21,6 @@ $ErrorActionPreference = "Stop"
 $Script:StartupParameters = @{} + $PSBoundParameters
 
 $AppName = "PhotoMonitorUploader"
-$AllowedExtensions = @(".jpg", ".jpeg", ".png", ".webp", ".zip", ".csv", ".xlsx", ".xls", ".json", ".txt", ".pdf")
-$LedgerExtensions = @(".csv", ".xlsx", ".xls", ".json", ".txt", ".pdf", ".zip")
 $PhotoExtensions = @(".jpg", ".jpeg", ".png", ".webp")
 $KnownPhotoStations = @("xiazhan", "shangzhan")
 $MaxUploadBytes = 200MB
@@ -212,6 +208,10 @@ function Update-ConfigFromParameters {
   }
 
   $changed = $false
+  if ([string](Get-ConfigValue $config "target" "photo") -ne "photo") {
+    $config.target = "photo"
+    $changed = $true
+  }
   if ($Script:StartupParameters.ContainsKey("WatchDir")) {
     if (-not (Test-Path -LiteralPath $WatchDir)) {
       throw "Watch directory not found: $WatchDir"
@@ -225,10 +225,6 @@ function Update-ConfigFromParameters {
   }
   if ($Script:StartupParameters.ContainsKey("Station")) {
     $config.station = $Station
-    $changed = $true
-  }
-  if ($Script:StartupParameters.ContainsKey("Target")) {
-    $config.target = $Target
     $changed = $true
   }
   if ($Script:StartupParameters.ContainsKey("IntervalSeconds")) {
@@ -250,7 +246,7 @@ function Update-ConfigFromParameters {
 
   if ($changed) {
     Save-JsonFile $ConfigFile $config
-    Write-UploaderLog "config updated from command line: target=$(Get-ConfigValue $config "target" "photo") watch_dir=$($config.watch_dir)"
+    Write-UploaderLog "config updated from command line: target=photo watch_dir=$($config.watch_dir)"
   }
 }
 
@@ -288,7 +284,7 @@ function Invoke-Login {
     username = $result.user.username
     department = $Department
     station = $Station
-    target = $Target
+    target = "photo"
     watch_dir = (Resolve-Path -LiteralPath $WatchDir).Path
     interval_seconds = $IntervalSeconds
     stable_seconds = $StableSeconds
@@ -296,7 +292,7 @@ function Invoke-Login {
     include_subdirectories = (-not $NoSubdirectories.IsPresent)
   }
   Save-JsonFile $ConfigFile $config
-  Write-UploaderLog "login ok: user=$($config.username) department=$Department target=$Target watch_dir=$($config.watch_dir)"
+  Write-UploaderLog "login ok: user=$($config.username) department=$Department target=photo watch_dir=$($config.watch_dir)"
   Write-Host "Login success. Config saved to $ConfigFile"
 }
 
@@ -309,15 +305,6 @@ function Test-StableFile {
   param([System.IO.FileInfo]$File, [int]$Seconds)
   $age = ((Get-Date) - $File.LastWriteTime).TotalSeconds
   return $File.Length -gt 0 -and $age -ge $Seconds
-}
-
-function Get-UploadPath {
-  param([string]$TargetName)
-  switch ($TargetName) {
-    "files" { return "/uploads/files" }
-    "ledgers" { return "/uploads/ledgers" }
-    default { return "/uploads" }
-  }
 }
 
 function Resolve-PhotoStation {
@@ -366,16 +353,14 @@ function Invoke-UploadFile {
     $client.Timeout = [TimeSpan]::FromSeconds([Math]::Max(10, [int](Get-ConfigValue $Config "timeout_seconds" $TimeoutSeconds)))
     $client.DefaultRequestHeaders.Authorization = [System.Net.Http.Headers.AuthenticationHeaderValue]::new("Bearer", [string]$Config.token)
     $content.Add([System.Net.Http.StringContent]::new([string]$Config.department), "department")
-    $targetName = [string](Get-ConfigValue $Config "target" "photo")
-    $stationName = if ($targetName -eq "photo") { Resolve-PhotoStation $Config $File } else { [string](Get-ConfigValue $Config "station" "uploads") }
+    $stationName = Resolve-PhotoStation $Config $File
     $content.Add([System.Net.Http.StringContent]::new($stationName), "station")
 
     $stream = [System.IO.File]::Open($File.FullName, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::Read)
     $fileContent = [System.Net.Http.StreamContent]::new($stream)
     $content.Add($fileContent, "file", $File.Name)
 
-    $uploadPath = Get-UploadPath $targetName
-    $response = $client.PostAsync("$($Config.server)$uploadPath", $content).Result
+    $response = $client.PostAsync("$($Config.server)/uploads", $content).Result
     $text = $response.Content.ReadAsStringAsync().Result
     if (-not $response.IsSuccessStatusCode) {
       throw "HTTP $([int]$response.StatusCode): $text"
@@ -398,8 +383,7 @@ function Invoke-ScanOnce {
     $stateMap[$property.Name] = $property.Value
   }
 
-  $targetName = [string](Get-ConfigValue $config "target" "photo")
-  $extensions = if ($targetName -eq "ledgers") { $LedgerExtensions } elseif ($targetName -eq "photo") { $PhotoExtensions } else { $AllowedExtensions }
+  $extensions = $PhotoExtensions
   $uploaded = 0
   $files = @(Get-WatchedFiles $config $extensions)
   Write-UploaderLog "scan started: files=$($files.Count) include_subdirectories=$(Get-ConfigValue $config "include_subdirectories" $true) watch_dir=$($config.watch_dir)"
@@ -426,8 +410,8 @@ function Invoke-ScanOnce {
       $result = Invoke-UploadFile $config $file
       $stateMap[$key] = [ordered]@{
         path = $file.FullName
-        target = $targetName
-        station = if ($targetName -eq "photo") { Resolve-PhotoStation $config $file } else { [string](Get-ConfigValue $config "station" "uploads") }
+        target = "photo"
+        station = Resolve-PhotoStation $config $file
         uploaded_at = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
         server_item = $result.item
       }
@@ -458,7 +442,7 @@ function Start-RunLoop {
   }
 
   try {
-    Write-UploaderLog "uploader started: interval=${interval}s target=$(Get-ConfigValue $config "target" "photo") watch_dir=$($config.watch_dir)"
+    Write-UploaderLog "uploader started: interval=${interval}s target=photo watch_dir=$($config.watch_dir)"
     while ($true) {
       $count = Invoke-ScanOnce
       if ($count -gt 0) {
@@ -549,7 +533,7 @@ function Show-Status {
   Write-Host "server: $($config.server)"
   Write-Host "user: $($config.username)"
   Write-Host "department: $($config.department)"
-  Write-Host "target: $(Get-ConfigValue $config "target" "photo")"
+  Write-Host "target: photo"
   Write-Host "watch_dir: $($config.watch_dir)"
   Write-Host "interval_seconds: $(Get-ConfigValue $config "interval_seconds" $IntervalSeconds)"
   Write-Host "stable_seconds: $(Get-ConfigValue $config "stable_seconds" $StableSeconds)"
