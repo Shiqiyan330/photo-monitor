@@ -38,6 +38,12 @@ LEGACY_CATEGORY_ALIASES = {
     "files": "company_files",
 }
 
+PUBLIC_ROUTE_SEGMENTS = {
+    "company_files": "files",
+    "study_articles": "study-articles",
+    "ledgers": "ledgers",
+}
+
 
 def get_accessible_departments(user: dict) -> list[str]:
     if user["role"] == "admin":
@@ -151,7 +157,8 @@ def _public_item(item: dict, include_download_url: bool = True) -> dict:
     public = dict(item)
     public.pop("absolute_path", None)
     if include_download_url:
-        public["url"] = f"/uploads/{item['category']}/{item['id']}/download"
+        route_segment = PUBLIC_ROUTE_SEGMENTS.get(item["category"], item["category"])
+        public["url"] = f"/uploads/{route_segment}/{item['id']}/download"
     return public
 
 

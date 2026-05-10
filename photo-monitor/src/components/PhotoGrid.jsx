@@ -1,6 +1,11 @@
 import { useEffect, useRef } from "react"
 import { getAssetUrl } from "../api"
 
+function formatPhotoTime(photo) {
+  const value = photo.actual_time ?? photo.time
+  return value ? new Date(value * 1000).toLocaleString() : ""
+}
+
 export default function PhotoGrid({
   photos,
   loading,
@@ -58,10 +63,10 @@ export default function PhotoGrid({
               loading="lazy"
               decoding="async"
               onClick={() => onClickPhoto(photo)}
-            />
+            /> 
 
             <div className="photo-meta">
-              <span>{new Date(photo.time * 1000).toLocaleString()}</span>
+              <span>{formatPhotoTime(photo)}</span>
               <span>{(photo.size / 1024).toFixed(1)} KB</span>
             </div>
 

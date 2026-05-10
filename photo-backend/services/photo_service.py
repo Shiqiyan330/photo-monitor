@@ -4,8 +4,10 @@ from pathlib import Path
 
 IMG_EXTS = {".jpg", ".jpeg", ".png", ".webp"}
 PHOTO_DATE_PATTERNS = (
+    re.compile(r"(?<!\d)(20\d{2})[_-](\d{2})[_-](\d{2})[_-](\d{2})[_-](\d{2})[_-](\d{2})(?!\d)"),
+    re.compile(r"(?<!\d)(20\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?!\d)"),
     re.compile(r"(?<!\d)(20\d{2})[_-](\d{2})[_-](\d{2})(?!\d)"),
-    re.compile(r"(?<!\d)(20\d{2})(\d{2})(\d{2})(?:\d{6})?(?!\d)"),
+    re.compile(r"(?<!\d)(20\d{2})(\d{2})(\d{2})(?!\d)"),
 )
 
 
@@ -15,11 +17,8 @@ def extract_photo_datetime_from_name(filename: str) -> datetime | None:
         if not match:
             continue
         try:
-            return datetime(
-                int(match.group(1)),
-                int(match.group(2)),
-                int(match.group(3)),
-            )
+            values = [int(match.group(index)) for index in range(1, len(match.groups()) + 1)]
+            return datetime(*values)
         except ValueError:
             continue
     return None
@@ -29,6 +28,8 @@ def _parse_date_boundary(value: str | None, end_of_day: bool = False) -> float |
     if not value:
         return None
     try:
+        if "T" in value or " " in value:
+            return datetime.fromisoformat(value).timestamp()
         parsed = date.fromisoformat(value)
     except ValueError:
         return None
@@ -55,6 +56,7 @@ def _collect_photos_from_folder(base: Path, folder: Path, department: str = "") 
                 "url": f"/static/{rel_path.as_posix()}",
                 "thumbnail_url": f"/thumbnails/{rel_path.as_posix()}",
                 "time": name_time.timestamp() if name_time else stat.st_mtime,
+                "actual_time": name_time.timestamp() if name_time else stat.st_mtime,
                 "filesystem_time": stat.st_mtime,
                 "size": stat.st_size,
                 "folder": str(file.parent),

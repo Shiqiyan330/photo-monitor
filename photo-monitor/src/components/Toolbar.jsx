@@ -36,13 +36,21 @@ export default function Toolbar({
         </div>
 
         <label className="toolbar-select">
-          <span>开始日期</span>
-          <input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+          <span>开始时间</span>
+          <input
+            type="datetime-local"
+            value={startDate}
+            onChange={(event) => setStartDate(event.target.value)}
+          />
         </label>
 
         <label className="toolbar-select">
-          <span>结束日期</span>
-          <input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+          <span>结束时间</span>
+          <input
+            type="datetime-local"
+            value={endDate}
+            onChange={(event) => setEndDate(event.target.value)}
+          />
         </label>
 
         <label className="toolbar-select">
