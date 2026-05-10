@@ -10,7 +10,14 @@ from tempfile import NamedTemporaryFile
 
 from fastapi import HTTPException, UploadFile
 
+from services.auth_service import ALL_DEPARTMENTS, extract_matrix_departments, has_matrix_permission
 from services.photo_service import IMG_EXTS
+
+CATEGORY_SYSTEMS = {
+    "company_files": "company_files",
+    "study_articles": "study_articles",
+    "ledgers": "ledgers",
+}
 
 SAFE_NAME_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 DEFAULT_MAX_UPLOAD_MB = 200
@@ -45,9 +52,16 @@ PUBLIC_ROUTE_SEGMENTS = {
 }
 
 
-def get_accessible_departments(user: dict) -> list[str]:
+def get_accessible_departments(user: dict, system: str | None = None, action: str = "read") -> list[str]:
     if user["role"] == "admin":
         return []
+
+    if system:
+        matrix_departments = extract_matrix_departments(user.get("permissions") or [], system, action)
+        if ALL_DEPARTMENTS in matrix_departments:
+            return []
+        if matrix_departments:
+            return matrix_departments
 
     departments = list(user.get("department_permissions") or [])
     if user.get("department"):
@@ -56,12 +70,12 @@ def get_accessible_departments(user: dict) -> list[str]:
     return list(dict.fromkeys([item.strip() for item in departments if item and item.strip()]))
 
 
-def ensure_department_upload_allowed(user: dict, department: str) -> None:
+def ensure_department_action_allowed(user: dict, system: str, department: str, action: str) -> None:
     if user["role"] == "admin":
         return
 
-    if department not in get_accessible_departments(user):
-        raise HTTPException(status_code=403, detail="No permission to upload to this department")
+    if not has_matrix_permission(user, system, action, department):
+        raise HTTPException(status_code=403, detail=f"No permission to {action} this department")
 
 
 def clean_path_part(value: str, field_name: str) -> str:
@@ -182,7 +196,7 @@ def save_photo_upload_file(
 ) -> dict:
     normalized_department = clean_path_part(department, "department")
     normalized_station = clean_path_part(station, "station")
-    ensure_department_upload_allowed(user, normalized_department)
+    ensure_department_action_allowed(user, "photos", normalized_department, "create")
 
     filename = clean_filename(file.filename)
     suffix = Path(filename).suffix.lower()
@@ -226,7 +240,7 @@ def save_data_upload_file(
     config = _category_config(category)
 
     normalized_department = clean_path_part(department, "department")
-    ensure_department_upload_allowed(user, normalized_department)
+    ensure_department_action_allowed(user, CATEGORY_SYSTEMS[category], normalized_department, "create")
 
     filename = clean_filename(file.filename)
     suffix = Path(filename).suffix.lower()
@@ -265,7 +279,7 @@ def list_data_uploads(base: Path, category: str, user: dict) -> list[dict]:
     _category_config(category)
 
     category_base = base / category
-    allowed_departments = None if user["role"] == "admin" else get_accessible_departments(user)
+    allowed_departments = None if user["role"] == "admin" else get_accessible_departments(user, CATEGORY_SYSTEMS[category], "read")
     metadata = _read_metadata(base)
     items = []
 
@@ -326,7 +340,7 @@ def get_data_upload(base: Path, category: str, upload_id: str, user: dict) -> tu
     if not item or item.get("category") != category:
         raise HTTPException(status_code=404, detail="File not found")
 
-    allowed_departments = None if user["role"] == "admin" else get_accessible_departments(user)
+    allowed_departments = None if user["role"] == "admin" else get_accessible_departments(user, CATEGORY_SYSTEMS[category], "read")
     if allowed_departments is not None and item.get("department") not in allowed_departments:
         raise HTTPException(status_code=403, detail="No permission to access this file")
 
@@ -341,8 +355,7 @@ def get_data_upload(base: Path, category: str, upload_id: str, user: dict) -> tu
 def delete_data_upload(base: Path, category: str, upload_id: str, user: dict) -> dict:
     category = normalize_category(category)
     target, item = get_data_upload(base, category, upload_id, user)
-    if user["role"] != "admin" and item.get("uploaded_by") != user.get("username"):
-        raise HTTPException(status_code=403, detail="Only admins or the uploader can delete this file")
+    ensure_department_action_allowed(user, CATEGORY_SYSTEMS[category], item.get("department", ""), "delete")
 
     metadata = _read_metadata(base)
     target.unlink(missing_ok=True)

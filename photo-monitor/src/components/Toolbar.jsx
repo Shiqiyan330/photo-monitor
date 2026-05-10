@@ -12,6 +12,9 @@ export default function Toolbar({
   setDedupeEnabled,
   dedupeWindowSeconds,
   setDedupeWindowSeconds,
+  department,
+  setDepartment,
+  departmentOptions,
   startTime,
   setStartTime,
   endTime,
@@ -34,6 +37,19 @@ export default function Toolbar({
             </button>
           ))}
         </div>
+
+        {departmentOptions.length ? (
+          <label className="toolbar-select">
+            <span>部门</span>
+            <select value={department} onChange={(event) => setDepartment(event.target.value)}>
+              {departmentOptions.map((item) => (
+                <option key={item || "all"} value={item}>
+                  {item || "全部部门"}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
 
         <label className="toolbar-select">
           <span>展示数量</span>

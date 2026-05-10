@@ -5,6 +5,7 @@ from fastapi.responses import FileResponse
 from PIL import Image
 
 from routers.deps import require_camera_access
+from services.auth_service import ALL_DEPARTMENTS, extract_matrix_departments
 from services.photo_service import IMG_EXTS, get_all_photos
 
 router = APIRouter()
@@ -17,6 +18,12 @@ THUMB_MAX_SIZE = (360, 360)
 def _get_accessible_departments(user: dict) -> list[str]:
     if user["role"] == "admin":
         return []
+
+    matrix_departments = extract_matrix_departments(user.get("permissions") or [], "photos", "read")
+    if ALL_DEPARTMENTS in matrix_departments:
+        return []
+    if matrix_departments:
+        return matrix_departments
 
     departments = list(user.get("department_permissions") or [])
     if user.get("department"):

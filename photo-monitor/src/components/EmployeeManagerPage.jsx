@@ -1,15 +1,16 @@
 import { useMemo, useState } from "react"
 
 const FEATURE_PERMISSION_OPTIONS = [
-  { value: "camera", label: "监控查看" },
-  { value: "camera_all_departments", label: "全部门照片" },
-  { value: "photo_all_departments", label: "公司文件" },
-  { value: "study_view", label: "学习交流查看" },
-  { value: "study_edit", label: "学习交流上传/删除" },
-  { value: "ledger_view", label: "台账查看" },
-  { value: "upload", label: "台账上传" },
-  { value: "structure", label: "公司架构" },
-  { value: "cross_dept_files", label: "跨部门文件" },
+  { value: "camera", label: "照片查看", description: "查看本人有权限部门的监控照片" },
+  { value: "camera_all_departments", label: "全部门照片", description: "查看所有部门的监控照片" },
+  { value: "photo_upload", label: "照片上传", description: "允许本地脚本或接口上传监控照片" },
+  { value: "company_files_view", label: "公司文件", description: "访问公司文件页面和文件列表" },
+  { value: "company_files_edit", label: "公司文件上传/删除", description: "上传或删除公司文件" },
+  { value: "study_view", label: "学习交流查看", description: "访问学习文章列表和在线查看" },
+  { value: "study_edit", label: "学习交流上传/删除", description: "上传或删除学习文章" },
+  { value: "ledger_view", label: "台账查看", description: "访问台账列表和在线查看" },
+  { value: "ledger_upload", label: "台账上传", description: "上传台账文件" },
+  { value: "structure", label: "公司架构", description: "查看组织架构和员工联系方式" },
 ]
 
 const EMPTY_FORM = {
@@ -20,11 +21,29 @@ const EMPTY_FORM = {
   department: "",
   position: "",
   rank: "",
-  permissions: ["camera", "study_view", "ledger_view", "upload"],
+  permissions: ["camera", "study_view", "ledger_view", "structure"],
 }
+
+const PERMISSION_SYSTEMS = [
+  { value: "photos", label: "照片" },
+  { value: "company_files", label: "公司文件" },
+  { value: "study_articles", label: "学习交流" },
+  { value: "ledgers", label: "台账" },
+]
+
+const PERMISSION_ACTIONS = [
+  { value: "read", label: "查" },
+  { value: "create", label: "增" },
+  { value: "update", label: "改" },
+  { value: "delete", label: "删" },
+]
 
 function buildDepartmentPermission(department) {
   return `dept_${department}`
+}
+
+function buildMatrixPermission(system, department, action) {
+  return `perm:${system}:${department || "*"}:${action}`
 }
 
 function getDepartmentPermissions(employee) {
@@ -67,6 +86,7 @@ export default function EmployeeManagerPage({
     value: buildDepartmentPermission(item),
     label: item,
   }))
+  const matrixDepartmentOptions = ["*", ...departmentOptions]
 
   const groupedEmployees = useMemo(() => {
     const groups = new Map()
@@ -267,13 +287,52 @@ export default function EmployeeManagerPage({
                   <section className="permission-section">
                     <div className="permission-section-head">
                       <div>
-                        <div className="permission-title">功能权限</div>
-                        <p className="field-hint">监控、文件、学习交流、上传和公司架构权限会在这里统一配置。</p>
+                        <div className="permission-title">系统-部门-增删改查权限</div>
+                        <p className="field-hint">按“某人-某系统-某部门-增删改查”授权。* 表示全部部门。</p>
+                      </div>
+                    </div>
+
+                    <div className="permission-matrix">
+                      <div className="permission-matrix-head">
+                        <span>系统</span>
+                        <span>部门</span>
+                        {PERMISSION_ACTIONS.map((action) => (
+                          <span key={action.value}>{action.label}</span>
+                        ))}
+                      </div>
+                      {PERMISSION_SYSTEMS.flatMap((system) =>
+                        matrixDepartmentOptions.map((department) => (
+                          <div key={`${system.value}-${department}`} className="permission-matrix-row">
+                            <span>{system.label}</span>
+                            <span>{department === "*" ? "全部部门" : department}</span>
+                            {PERMISSION_ACTIONS.map((action) => {
+                              const permission = buildMatrixPermission(system.value, department, action.value)
+                              return (
+                                <label key={permission} className="matrix-check">
+                                  <input
+                                    type="checkbox"
+                                    checked={form.permissions.includes(permission)}
+                                    onChange={() => togglePermission(permission)}
+                                  />
+                                </label>
+                              )
+                            })}
+                          </div>
+                        )),
+                      )}
+                    </div>
+                  </section>
+
+                  <section className="permission-section">
+                    <div className="permission-section-head">
+                      <div>
+                        <div className="permission-title">兼容功能权限</div>
+                        <p className="field-hint">用于兼容旧账号和页面入口控制。新权限请优先在上方矩阵配置。</p>
                       </div>
                     </div>
 
                     <div className="permission-grid">
-                      {FEATURE_PERMISSION_OPTIONS.map((item) => {
+                      {[...FEATURE_PERMISSION_OPTIONS, ...departmentPermissionOptions].map((item) => {
                         const checked = form.permissions.includes(item.value)
                         return (
                           <label
@@ -285,43 +344,14 @@ export default function EmployeeManagerPage({
                               checked={checked}
                               onChange={() => togglePermission(item.value)}
                             />
-                            <span>{item.label}</span>
+                            <span>
+                              <strong>{item.label}</strong>
+                              {item.description ? <small>{item.description}</small> : null}
+                            </span>
                           </label>
                         )
                       })}
                     </div>
-                  </section>
-
-                  <section className="permission-section">
-                    <div className="permission-section-head">
-                      <div>
-                        <div className="permission-title">部门查看权限</div>
-                        <p className="field-hint">如果一个员工要看多个部门，直接在这里勾选，后续会联动部门切换入口。</p>
-                      </div>
-                    </div>
-
-                    {departmentPermissionOptions.length ? (
-                      <div className="permission-grid">
-                        {departmentPermissionOptions.map((item) => {
-                          const checked = form.permissions.includes(item.value)
-                          return (
-                            <label
-                              key={item.value}
-                              className={checked ? "permission-chip active" : "permission-chip"}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => togglePermission(item.value)}
-                              />
-                              <span>{item.label}</span>
-                            </label>
-                          )
-                        })}
-                      </div>
-                    ) : (
-                      <div className="empty-state compact-empty-state">先录入员工部门，这里就会自动生成可勾选的部门权限。</div>
-                    )}
                   </section>
                 </div>
               </div>

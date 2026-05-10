@@ -56,6 +56,7 @@ const MODULES = [
   {
     key: PAGE_MONITOR,
     permission: "camera",
+    matrixSystem: "photos",
     title: "监控拍照",
     description: "实时监控与拍照记录",
     accent: "blue",
@@ -63,7 +64,8 @@ const MODULES = [
   },
   {
     key: PAGE_DOCUMENTS,
-    permission: "photo_all_departments",
+    permission: "company_files_view",
+    matrixSystem: "company_files",
     title: "公司文件",
     description: "公司文档资料库",
     accent: "green",
@@ -72,6 +74,7 @@ const MODULES = [
   {
     key: PAGE_LEARNING,
     permission: "study_view",
+    matrixSystem: "study_articles",
     title: "学习交流",
     description: "在线学习与文档交流",
     accent: "orange",
@@ -80,6 +83,7 @@ const MODULES = [
   {
     key: PAGE_LEDGER,
     permission: "ledger_view",
+    matrixSystem: "ledgers",
     title: "台账管理",
     description: "工作台账上传与管理",
     accent: "teal",
@@ -198,11 +202,31 @@ function getDepartmentViewOptions(user, departments) {
 }
 
 function hasCameraPermission(user) {
-  return Boolean(user && (user.role === "admin" || user.permissions?.includes("camera")))
+  return Boolean(
+    user &&
+      (user.role === "admin" ||
+        user.permissions?.includes("camera") ||
+        user.permissions?.includes("camera_all_departments") ||
+        hasMatrixReadPermission(user, "photos")),
+  )
+}
+
+function hasMatrixReadPermission(user, system) {
+  if (!user) {
+    return false
+  }
+  if (user.role === "admin") {
+    return true
+  }
+  return (user.permissions ?? []).some((item) => item.startsWith(`perm:${system}:`) && item.endsWith(":read"))
 }
 
 function hasPermission(user, permission) {
   return Boolean(user && (user.role === "admin" || user.permissions?.includes(permission)))
+}
+
+function hasModuleAccess(user, module) {
+  return hasPermission(user, module.permission) || hasMatrixReadPermission(user, module.matrixSystem)
 }
 
 function readCurrentPage() {
@@ -418,24 +442,31 @@ function UploadList({ title, items, emptyText, onDelete, onDownload, onView }) {
   return (
     <section className="office-panel">
       <div className="panel-header">
-        <h3>{title}</h3>
-        <span className="panel-muted">共 {items.length} 个文件</span>
+        <div>
+          <h3>{title}</h3>
+          <p className="panel-muted">按部门归档，支持在线查看、下载和删除。</p>
+        </div>
+        <span className="file-count-badge">共 {items.length} 个文件</span>
       </div>
 
       {items.length ? (
-        <div className="upload-list">
+        <div className="file-card-grid">
           {items.map((item) => (
-            <article key={item.id ?? item.url ?? item.name} className="upload-list-row">
-              <div>
-                <div className="employee-main">{item.name}</div>
-                <div className="employee-sub">
-                  {(item.department || "未分配部门") + " / " + (item.size ? `${(item.size / 1024 / 1024).toFixed(2)} MB` : "未知大小")}
+            <article key={item.id ?? item.url ?? item.name} className="file-card">
+              <div className="file-card-icon" aria-hidden="true">
+                <span className="material-symbols-outlined">description</span>
+              </div>
+              <div className="file-card-body">
+                <div className="file-card-title" title={item.name}>{item.name}</div>
+                <div className="file-card-meta">
+                  <span>{item.department || "未分配部门"}</span>
+                  <span>{item.size ? `${(item.size / 1024 / 1024).toFixed(2)} MB` : "未知大小"}</span>
                 </div>
-                <div className="employee-sub">
+                <div className="file-card-sub">
                   {(item.uploaded_at || item.created_at || "未知时间") + (item.uploader ? ` / ${item.uploader}` : "")}
                 </div>
               </div>
-              <div className="employee-actions">
+              <div className="file-card-actions">
                 <button type="button" className="ghost-button" onClick={() => onView(item)}>
                   查看
                 </button>
@@ -815,6 +846,7 @@ function App() {
   const [dedupeWindowSeconds, setDedupeWindowSeconds] = useState(readInitialDedupeWindow)
   const [startTime, setStartTime] = useState("")
   const [endTime, setEndTime] = useState("")
+  const [selectedDepartment, setSelectedDepartment] = useState("")
   const [selectedPhoto, setSelectedPhoto] = useState(null)
   const [loadingPhotos, setLoadingPhotos] = useState(false)
   const [loadingMorePhotos, setLoadingMorePhotos] = useState(false)
@@ -836,7 +868,8 @@ function App() {
   const limitedPhotos = parsedPhotoLimit ? filteredPhotos.slice(0, parsedPhotoLimit) : filteredPhotos
   const displayedPhotos = limitedPhotos
   const hasMorePhotos = photoCursor != null && (!parsedPhotoLimit || photos.length < parsedPhotoLimit)
-  const accessibleModules = MODULES.filter((module) => hasPermission(user, module.permission))
+  const accessibleModules = MODULES.filter((module) => hasModuleAccess(user, module))
+  const photoDepartmentOptions = getDepartmentViewOptions(user, departments)
 
   const getNextPhotoPageSize = () => {
     const batchSize = getPhotoFeedBatchSize()
@@ -893,7 +926,7 @@ function App() {
       const initialLimit = parsedPhotoLimit
         ? Math.min(getPhotoFeedBatchSize(), parsedPhotoLimit)
         : getPhotoFeedBatchSize()
-      const data = await fetchPhotos(nextStation, "", {
+      const data = await fetchPhotos(nextStation, selectedDepartment, {
         limit: initialLimit,
         cursor: 0,
         startTime,
@@ -930,7 +963,7 @@ function App() {
     setPhotoError("")
 
     try {
-      const data = await fetchPhotos(station, "", {
+      const data = await fetchPhotos(station, selectedDepartment, {
         limit: pageSize,
         cursor: photoCursor,
         startTime,
@@ -987,6 +1020,7 @@ function App() {
       setDepartments([])
       setStartTime("")
       setEndTime("")
+      setSelectedDepartment("")
       setSelectedPhoto(null)
       return
     }
@@ -1005,7 +1039,7 @@ function App() {
     }
 
     loadPhotos()
-  }, [station, startTime, endTime, user, hasPhotoAccess, currentPage])
+  }, [station, selectedDepartment, startTime, endTime, user, hasPhotoAccess, currentPage])
 
   useEffect(() => {
     if (!user || user.role !== "admin") {
@@ -1026,7 +1060,7 @@ function App() {
     }
 
     const module = MODULES.find((item) => item.key === currentPage)
-    if (module && !hasPermission(user, module.permission)) {
+    if (module && !hasModuleAccess(user, module)) {
       setRoute(PAGE_DASHBOARD)
     }
   }, [user, currentPage])
@@ -1081,6 +1115,7 @@ function App() {
     setPhotoTotal(0)
     setStartTime("")
     setEndTime("")
+    setSelectedDepartment("")
     setSelectedPhoto(null)
     setAuthError("")
   }
@@ -1095,6 +1130,7 @@ function App() {
     setPhotoTotal(0)
     setStartTime("")
     setEndTime("")
+    setSelectedDepartment("")
     setSelectedPhoto(null)
     setPasswordModalOpen(false)
     setCurrentPage(PAGE_DASHBOARD)
@@ -1209,7 +1245,7 @@ function App() {
     )
   }
 
-  if (currentPage === PAGE_DOCUMENTS && hasPermission(user, "photo_all_departments")) {
+  if (currentPage === PAGE_DOCUMENTS && hasModuleAccess(user, MODULES.find((item) => item.key === PAGE_DOCUMENTS))) {
     return (
       <div className="app-shell office-page-shell">
         <DocumentsPage user={user} departments={departments} showBanner={showBanner} onBack={openDashboardPage} />
@@ -1217,7 +1253,7 @@ function App() {
     )
   }
 
-  if (currentPage === PAGE_LEARNING && hasPermission(user, "study_view")) {
+  if (currentPage === PAGE_LEARNING && hasModuleAccess(user, MODULES.find((item) => item.key === PAGE_LEARNING))) {
     return (
       <div className="app-shell office-page-shell">
         <LearningPage user={user} departments={departments} showBanner={showBanner} onBack={openDashboardPage} />
@@ -1225,7 +1261,7 @@ function App() {
     )
   }
 
-  if (currentPage === PAGE_LEDGER && hasPermission(user, "ledger_view")) {
+  if (currentPage === PAGE_LEDGER && hasModuleAccess(user, MODULES.find((item) => item.key === PAGE_LEDGER))) {
     return (
       <div className="app-shell office-page-shell">
         <LedgerWorkspacePage user={user} departments={departments} showBanner={showBanner} onBack={openDashboardPage} />
@@ -1290,6 +1326,9 @@ function App() {
             setDedupeEnabled={setDedupeEnabled}
             dedupeWindowSeconds={dedupeWindowSeconds}
             setDedupeWindowSeconds={(value) => setDedupeWindowSeconds(keepDigitsOnly(value))}
+            department={selectedDepartment}
+            setDepartment={setSelectedDepartment}
+            departmentOptions={photoDepartmentOptions}
             startTime={startTime}
             setStartTime={setStartTime}
             endTime={endTime}

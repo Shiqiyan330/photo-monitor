@@ -4,7 +4,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 
-from routers.deps import require_file_access, require_ledger_access, require_study_access, require_study_edit_access, require_upload_access
+from routers.deps import require_file_access, require_file_edit_access, require_ledger_access, require_ledger_upload_access, require_study_access, require_study_edit_access, require_upload_access
 from services.auth_service import employee_system
 from services.upload_service import (
     delete_data_upload,
@@ -50,7 +50,7 @@ def get_file_view_user(
     user = _user_from_token(token) or _user_from_token(_extract_bearer_token(authorization))
     if not user:
         raise HTTPException(status_code=401, detail="请先登录")
-    return _require_permission(user, {"photo_all_departments", "camera"}, "No permission to access files")
+    return _require_permission(user, {"company_files_view"}, "No permission to access files")
 
 
 def get_study_view_user(
@@ -70,7 +70,7 @@ def get_ledger_view_user(
     user = _user_from_token(token) or _user_from_token(_extract_bearer_token(authorization))
     if not user:
         raise HTTPException(status_code=401, detail="请先登录")
-    return _require_permission(user, {"ledger_view", "upload"}, "No permission to access ledgers")
+    return _require_permission(user, {"ledger_view"}, "No permission to access ledgers")
 
 
 def inline_file_response(target: Path, item: dict) -> FileResponse:
@@ -97,7 +97,7 @@ def upload_data(
 def upload_file_data(
     department: str = Form(...),
     file: UploadFile = File(...),
-    user: dict = Depends(require_file_access),
+    user: dict = Depends(require_file_edit_access),
 ):
     item = save_data_upload_file(DATA_BASE, "company_files", file, department, user)
     return {"success": True, "item": item}
@@ -121,7 +121,7 @@ def view_uploaded_file(upload_id: str, user: dict = Depends(get_file_view_user))
 
 
 @router.delete("/files/{upload_id}")
-def delete_uploaded_file(upload_id: str, user: dict = Depends(require_file_access)):
+def delete_uploaded_file(upload_id: str, user: dict = Depends(require_file_edit_access)):
     item = delete_data_upload(DATA_BASE, "company_files", upload_id, user)
     return {"success": True, "item": item}
 
@@ -163,7 +163,7 @@ def delete_study_article(upload_id: str, user: dict = Depends(require_study_edit
 def upload_ledger_data(
     department: str = Form(...),
     file: UploadFile = File(...),
-    user: dict = Depends(require_upload_access),
+    user: dict = Depends(require_ledger_upload_access),
 ):
     item = save_data_upload_file(DATA_BASE, "ledgers", file, department, user)
     return {"success": True, "item": item}
@@ -187,6 +187,6 @@ def view_uploaded_ledger(upload_id: str, user: dict = Depends(get_ledger_view_us
 
 
 @router.delete("/ledgers/{upload_id}")
-def delete_uploaded_ledger(upload_id: str, user: dict = Depends(require_ledger_access)):
+def delete_uploaded_ledger(upload_id: str, user: dict = Depends(require_ledger_upload_access)):
     item = delete_data_upload(DATA_BASE, "ledgers", upload_id, user)
     return {"success": True, "item": item}
