@@ -135,6 +135,12 @@ export function fetchPhotos(station, department = "", options = {}) {
   if (options.endDate) {
     params.set("end_date", options.endDate)
   }
+  if (options.startTime) {
+    params.set("start_time", options.startTime)
+  }
+  if (options.endTime) {
+    params.set("end_time", options.endTime)
+  }
   return request(`/photos?${params.toString()}`)
 }
 

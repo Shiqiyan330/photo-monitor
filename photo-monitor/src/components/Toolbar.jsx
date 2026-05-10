@@ -12,6 +12,10 @@ export default function Toolbar({
   setDedupeEnabled,
   dedupeWindowSeconds,
   setDedupeWindowSeconds,
+  startTime,
+  setStartTime,
+  endTime,
+  setEndTime,
   onRefresh,
   loading,
 }) {
@@ -41,6 +45,16 @@ export default function Toolbar({
             onChange={(event) => setPhotoLimit(event.target.value)}
             placeholder="全部"
           />
+        </label>
+
+        <label className="toolbar-select">
+          <span>开始时段</span>
+          <input type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} />
+        </label>
+
+        <label className="toolbar-select">
+          <span>结束时段</span>
+          <input type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} />
         </label>
 
         <label className="toolbar-check">

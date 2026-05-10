@@ -1,4 +1,5 @@
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
@@ -74,8 +75,9 @@ def get_ledger_view_user(
 
 def inline_file_response(target: Path, item: dict) -> FileResponse:
     response = FileResponse(target, media_type=item.get("content_type"))
-    safe_name = item["name"].replace("\\", "_").replace('"', "'")
-    response.headers["Content-Disposition"] = f'inline; filename="{safe_name}"'
+    ascii_name = item["id"] or "preview"
+    encoded_name = quote(item["name"])
+    response.headers["Content-Disposition"] = f"inline; filename={ascii_name}; filename*=UTF-8''{encoded_name}"
     response.headers["X-Content-Type-Options"] = "nosniff"
     return response
 

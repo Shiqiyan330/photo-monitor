@@ -47,6 +47,20 @@ def _parse_date_boundary(value: str | None, end_of_day: bool = False) -> float |
     return datetime.combine(parsed, boundary_time).timestamp()
 
 
+def _parse_day_time(value: str | None) -> time | None:
+    if not value:
+        return None
+    try:
+        parts = [int(part) for part in value.split(":")]
+        if len(parts) == 2:
+            return time(parts[0], parts[1])
+        if len(parts) == 3:
+            return time(parts[0], parts[1], parts[2])
+    except ValueError:
+        return None
+    return None
+
+
 def _collect_photos_from_folder(base: Path, folder: Path, department: str = "") -> list[dict]:
     photos = []
 
@@ -104,6 +118,8 @@ def get_all_photos(
     allowed_departments: list[str] | None = None,
     start_date: str | None = None,
     end_date: str | None = None,
+    start_time: str | None = None,
+    end_time: str | None = None,
 ) -> list[dict]:
     photos = []
     normalized_department = (department or "").strip()
@@ -115,6 +131,8 @@ def get_all_photos(
 
     start_ts = _parse_date_boundary(start_date)
     end_ts = _parse_date_boundary(end_date, end_of_day=True)
+    start_day_time = _parse_day_time(start_time)
+    end_day_time = _parse_day_time(end_time)
 
     def filter_by_date(items: list[dict]) -> list[dict]:
         filtered = items
@@ -122,6 +140,16 @@ def get_all_photos(
             filtered = [item for item in filtered if item["time"] >= start_ts]
         if end_ts is not None:
             filtered = [item for item in filtered if item["time"] <= end_ts]
+        if start_day_time is not None:
+            filtered = [
+                item for item in filtered
+                if datetime.fromtimestamp(item["time"]).time() >= start_day_time
+            ]
+        if end_day_time is not None:
+            filtered = [
+                item for item in filtered
+                if datetime.fromtimestamp(item["time"]).time() <= end_day_time
+            ]
         return filtered
 
     if normalized_department:

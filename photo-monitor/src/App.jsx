@@ -813,6 +813,8 @@ function App() {
   const [photoLimit, setPhotoLimit] = useState(readInitialPhotoLimit)
   const [dedupeEnabled, setDedupeEnabled] = useState(readInitialDedupeEnabled)
   const [dedupeWindowSeconds, setDedupeWindowSeconds] = useState(readInitialDedupeWindow)
+  const [startTime, setStartTime] = useState("")
+  const [endTime, setEndTime] = useState("")
   const [selectedPhoto, setSelectedPhoto] = useState(null)
   const [loadingPhotos, setLoadingPhotos] = useState(false)
   const [loadingMorePhotos, setLoadingMorePhotos] = useState(false)
@@ -894,6 +896,8 @@ function App() {
       const data = await fetchPhotos(nextStation, "", {
         limit: initialLimit,
         cursor: 0,
+        startTime,
+        endTime,
       })
       setPhotos(data.items ?? data)
       setPhotoCursor(data.next_cursor ?? null)
@@ -929,6 +933,8 @@ function App() {
       const data = await fetchPhotos(station, "", {
         limit: pageSize,
         cursor: photoCursor,
+        startTime,
+        endTime,
       })
       setPhotos((current) => [...current, ...(data.items ?? data)])
       setPhotoCursor(data.next_cursor ?? null)
@@ -979,6 +985,8 @@ function App() {
       setPhotoTotal(0)
       setEmployees([])
       setDepartments([])
+      setStartTime("")
+      setEndTime("")
       setSelectedPhoto(null)
       return
     }
@@ -997,7 +1005,7 @@ function App() {
     }
 
     loadPhotos()
-  }, [station, user, hasPhotoAccess, currentPage])
+  }, [station, startTime, endTime, user, hasPhotoAccess, currentPage])
 
   useEffect(() => {
     if (!user || user.role !== "admin") {
@@ -1071,6 +1079,8 @@ function App() {
     setPhotos([])
     setPhotoCursor(null)
     setPhotoTotal(0)
+    setStartTime("")
+    setEndTime("")
     setSelectedPhoto(null)
     setAuthError("")
   }
@@ -1083,6 +1093,8 @@ function App() {
     setPhotos([])
     setPhotoCursor(null)
     setPhotoTotal(0)
+    setStartTime("")
+    setEndTime("")
     setSelectedPhoto(null)
     setPasswordModalOpen(false)
     setCurrentPage(PAGE_DASHBOARD)
@@ -1278,6 +1290,10 @@ function App() {
             setDedupeEnabled={setDedupeEnabled}
             dedupeWindowSeconds={dedupeWindowSeconds}
             setDedupeWindowSeconds={(value) => setDedupeWindowSeconds(keepDigitsOnly(value))}
+            startTime={startTime}
+            setStartTime={setStartTime}
+            endTime={endTime}
+            setEndTime={setEndTime}
             onRefresh={() => loadPhotos(station)}
             loading={loadingPhotos}
           />

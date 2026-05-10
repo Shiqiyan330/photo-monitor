@@ -33,6 +33,8 @@ def get_photos(
     cursor: int = 0,
     start_date: str | None = Query(default=None),
     end_date: str | None = Query(default=None),
+    start_time: str | None = Query(default=None),
+    end_time: str | None = Query(default=None),
     user=Depends(require_camera_access),
 ):
     normalized_department = (department or "").strip()
@@ -50,6 +52,8 @@ def get_photos(
         allowed_departments=None if user["role"] == "admin" else accessible_departments,
         start_date=start_date,
         end_date=end_date,
+        start_time=start_time,
+        end_time=end_time,
     )
     next_cursor = normalized_cursor + normalized_limit
 
