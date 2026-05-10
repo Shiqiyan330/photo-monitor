@@ -8,6 +8,7 @@ import {
   deleteStudyArticle,
   downloadFile,
   getAuthorizedUrl,
+  getAssetUrl,
   fetchLedgers,
   fetchCurrentUser,
   fetchEmployees,
@@ -224,8 +225,8 @@ function BrandMark({ compact = false }) {
         <span>Logo</span>
       </div>
       <div>
-        <div className="brand-name">瓒婂矚绱㈤亾</div>
-        {!compact ? <div className="brand-subtitle">鍔炲叕绠＄悊绯荤粺</div> : null}
+        <div className="brand-name">越岚索道</div>
+        {!compact ? <div className="brand-subtitle">办公管理系统</div> : null}
       </div>
     </div>
   )
@@ -250,15 +251,16 @@ function DashboardPage({ user, modules, onOpenModule, onOpenEmployees, onOpenPas
           </div>
           <div className="user-actions">
             <button type="button" className="ghost-button" onClick={onOpenPassword}>
-              淇敼瀵嗙爜
+              修改密码
             </button>
             {user.role === "admin" ? (
               <button type="button" className="ghost-button" onClick={onOpenEmployees}>
-                鍛樺伐绠＄悊
+                员工管理
               </button>
             ) : null}
             <button type="button" className="ghost-button" onClick={onLogout}>
-              閫€鍑虹櫥褰?            </button>
+              退出登录
+            </button>
           </div>
         </div>
       </section>
@@ -300,10 +302,153 @@ function OfficeModulePage({ title, children, onBack }) {
           <h2>{title}</h2>
         </div>
         <button type="button" className="ghost-button" onClick={onBack}>
-          杩斿洖涓荤晫闈?        </button>
+          返回主界面
+        </button>
       </section>
       {children}
     </div>
+  )
+}
+
+function UploadPanel({ title, description, departmentOptions, onSubmit, submitting }) {
+  const [department, setDepartment] = useState(departmentOptions[0] ?? "")
+  const [file, setFile] = useState(null)
+  const [dragging, setDragging] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [error, setError] = useState("")
+
+  useEffect(() => {
+    if (!department && departmentOptions.length) {
+      setDepartment(departmentOptions[0])
+    }
+  }, [department, departmentOptions])
+
+  const selectFile = (files) => {
+    const nextFile = files?.[0]
+    if (nextFile) {
+      setFile(nextFile)
+      setError("")
+      setProgress(0)
+    }
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    if (!file) {
+      setError("请选择要上传的文件")
+      return
+    }
+
+    setError("")
+    setProgress(0)
+    try {
+      await onSubmit({ department, file }, { onProgress: setProgress })
+      setFile(null)
+      setProgress(0)
+    } catch (submitError) {
+      setError(submitError.message)
+    }
+  }
+
+  return (
+    <form className="stack-form" onSubmit={handleSubmit}>
+      <div>
+        <h3>{title}</h3>
+        {description ? <p className="panel-muted">{description}</p> : null}
+      </div>
+
+      {departmentOptions.length ? (
+        <label className="field">
+          <span>部门</span>
+          <select value={department} onChange={(event) => setDepartment(event.target.value)}>
+            {departmentOptions.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+
+      <label
+        className={dragging ? "file-drop-zone active" : "file-drop-zone"}
+        onDragEnter={(event) => {
+          event.preventDefault()
+          setDragging(true)
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(event) => {
+          event.preventDefault()
+          setDragging(false)
+          selectFile(event.dataTransfer.files)
+        }}
+      >
+        <input type="file" disabled={submitting} onChange={(event) => selectFile(event.target.files)} />
+        <span className="material-symbols-outlined file-drop-icon" aria-hidden="true">
+          upload_file
+        </span>
+        <span className="file-drop-title">{file ? file.name : "拖拽文件到这里，或点击选择文件"}</span>
+        <span className="file-drop-meta">{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "支持常用文档、图片和压缩包"}</span>
+      </label>
+
+      {progress > 0 ? (
+        <div className="upload-progress">
+          <div className="upload-progress-track">
+            <span style={{ width: `${progress}%` }} />
+          </div>
+          <span>{progress}%</span>
+        </div>
+      ) : null}
+
+      {error ? <div className="form-error">{error}</div> : null}
+
+      <button type="submit" className="primary-button" disabled={submitting}>
+        {submitting ? "上传中..." : "上传"}
+      </button>
+    </form>
+  )
+}
+
+function UploadList({ title, items, emptyText, onDelete, onDownload, onView }) {
+  return (
+    <section className="office-panel">
+      <div className="panel-header">
+        <h3>{title}</h3>
+        <span className="panel-muted">共 {items.length} 个文件</span>
+      </div>
+
+      {items.length ? (
+        <div className="upload-list">
+          {items.map((item) => (
+            <article key={item.id ?? item.url ?? item.name} className="upload-list-row">
+              <div>
+                <div className="employee-main">{item.name}</div>
+                <div className="employee-sub">
+                  {(item.department || "未分配部门") + " / " + (item.size ? `${(item.size / 1024 / 1024).toFixed(2)} MB` : "未知大小")}
+                </div>
+                <div className="employee-sub">
+                  {(item.uploaded_at || item.created_at || "未知时间") + (item.uploader ? ` / ${item.uploader}` : "")}
+                </div>
+              </div>
+              <div className="employee-actions">
+                <button type="button" className="ghost-button" onClick={() => onView(item)}>
+                  查看
+                </button>
+                <button type="button" className="ghost-button" onClick={() => onDownload(item)}>
+                  下载
+                </button>
+                <button type="button" className="ghost-button danger-button" onClick={() => onDelete(item)}>
+                  删除
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="empty-state compact-empty-state">{emptyText}</div>
+      )}
+    </section>
   )
 }
 
@@ -955,7 +1100,7 @@ function App() {
   const handleChangePassword = async ({ oldPassword, newPassword }) => {
     const result = await changePassword(oldPassword, newPassword)
     setUser(result.user)
-    showBanner("瀵嗙爜淇敼鎴愬姛")
+    showBanner("密码修改成功")
   }
 
   const handleCreateEmployee = async (payload) => {
@@ -999,7 +1144,7 @@ function App() {
   if (booting) {
     return (
       <div className="app-shell">
-        <div className="status-card">姝ｅ湪鎭㈠鐧诲綍鐘舵€?..</div>
+        <div className="status-card">正在恢复登录状态...</div>
       </div>
     )
   }
@@ -1167,7 +1312,8 @@ function App() {
         </>
       ) : (
         <div className="status-card">
-          褰撳墠璐﹀彿娌℃湁鐩戞帶鏌ョ湅鏉冮檺锛岀洃鎺х珯鐐广€佸睍绀哄幓閲嶅拰閮ㄩ棬鍒囨崲鍖哄煙宸茶嚜鍔ㄩ殣钘忋€?        </div>
+          当前账号没有监控查看权限，监控站点、展示去重和部门切换区域已自动隐藏。
+        </div>
       )}
 
       <PhotoModal photo={selectedPhoto} onClose={() => setSelectedPhoto(null)} />
