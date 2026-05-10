@@ -28,6 +28,12 @@ def extract_photo_datetime_from_name(filename: str) -> datetime | None:
     return None
 
 
+def format_photo_datetime(value: datetime | None) -> str:
+    if not value:
+        return ""
+    return f"{value.year}/{value.month}/{value.day} {value.hour:02d}:{value.minute:02d}:{value.second:02d}"
+
+
 def _parse_date_boundary(value: str | None, end_of_day: bool = False) -> float | None:
     if not value:
         return None
@@ -54,13 +60,17 @@ def _collect_photos_from_folder(base: Path, folder: Path, department: str = "") 
         rel_path = file.relative_to(base)
         stat = file.stat()
         name_time = extract_photo_datetime_from_name(file.name)
+        actual_time = name_time.timestamp() if name_time else stat.st_mtime
         photos.append(
             {
                 "name": file.name,
                 "url": f"/static/{rel_path.as_posix()}",
                 "thumbnail_url": f"/thumbnails/{rel_path.as_posix()}",
-                "time": name_time.timestamp() if name_time else stat.st_mtime,
-                "actual_time": name_time.timestamp() if name_time else stat.st_mtime,
+                "time": actual_time,
+                "actual_time": actual_time,
+                "actual_time_text": format_photo_datetime(name_time)
+                if name_time
+                else datetime.fromtimestamp(stat.st_mtime).strftime("%Y/%m/%d %H:%M:%S"),
                 "filesystem_time": stat.st_mtime,
                 "size": stat.st_size,
                 "folder": str(file.parent),

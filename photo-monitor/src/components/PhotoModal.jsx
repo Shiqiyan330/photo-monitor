@@ -1,6 +1,9 @@
 import { getAssetUrl } from "../api"
 
 function formatPhotoTime(photo) {
+  if (photo.actual_time_text) {
+    return photo.actual_time_text
+  }
   const value = photo.actual_time ?? photo.time
   return value ? new Date(value * 1000).toLocaleString() : ""
 }

@@ -72,6 +72,14 @@ def get_ledger_view_user(
     return _require_permission(user, {"ledger_view", "upload"}, "No permission to access ledgers")
 
 
+def inline_file_response(target: Path, item: dict) -> FileResponse:
+    response = FileResponse(target, media_type=item.get("content_type"))
+    safe_name = item["name"].replace("\\", "_").replace('"', "'")
+    response.headers["Content-Disposition"] = f'inline; filename="{safe_name}"'
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
+
+
 @router.post("")
 def upload_data(
     department: str = Form(...),
@@ -107,7 +115,7 @@ def download_uploaded_file(upload_id: str, user: dict = Depends(require_file_acc
 @router.get("/files/{upload_id}/view")
 def view_uploaded_file(upload_id: str, user: dict = Depends(get_file_view_user)):
     target, item = get_data_upload(DATA_BASE, "company_files", upload_id, user)
-    return FileResponse(target, filename=item["name"], media_type=item.get("content_type"))
+    return inline_file_response(target, item)
 
 
 @router.delete("/files/{upload_id}")
@@ -140,7 +148,7 @@ def download_study_article(upload_id: str, user: dict = Depends(require_study_ac
 @router.get("/study-articles/{upload_id}/view")
 def view_study_article(upload_id: str, user: dict = Depends(get_study_view_user)):
     target, item = get_data_upload(DATA_BASE, "study_articles", upload_id, user)
-    return FileResponse(target, filename=item["name"], media_type=item.get("content_type"))
+    return inline_file_response(target, item)
 
 
 @router.delete("/study-articles/{upload_id}")
@@ -173,7 +181,7 @@ def download_uploaded_ledger(upload_id: str, user: dict = Depends(require_ledger
 @router.get("/ledgers/{upload_id}/view")
 def view_uploaded_ledger(upload_id: str, user: dict = Depends(get_ledger_view_user)):
     target, item = get_data_upload(DATA_BASE, "ledgers", upload_id, user)
-    return FileResponse(target, filename=item["name"], media_type=item.get("content_type"))
+    return inline_file_response(target, item)
 
 
 @router.delete("/ledgers/{upload_id}")
