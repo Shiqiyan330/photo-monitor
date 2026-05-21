@@ -36,6 +36,13 @@ $MaxUploadBytes = 200MB
 $MaxLogBytes = 5MB
 $MutexName = "Global\PhotoMonitorUploader"
 $SafePathPartPattern = '^[^<>:"/\\|?*\x00-\x1f]+$'
+$NumericConfigRules = [ordered]@{
+  interval_seconds = @{ default = $IntervalSeconds; min = 5; max = 86400 }
+  stable_seconds = @{ default = $StableSeconds; min = 0; max = 3600 }
+  timeout_seconds = @{ default = $TimeoutSeconds; min = 10; max = 3600 }
+  retry_count = @{ default = $RetryCount; min = 1; max = 10 }
+  retry_delay_seconds = @{ default = $RetryDelaySeconds; min = 1; max = 300 }
+}
 
 function Get-AppDir {
   $candidates = @()
@@ -206,6 +213,37 @@ function Get-ConfigValue {
   return $DefaultValue
 }
 
+function Get-ConfigInt {
+  param(
+    $Config,
+    [string]$Name
+  )
+
+  $rule = $NumericConfigRules[$Name]
+  if (-not $rule) {
+    throw "Unknown numeric config setting: $Name"
+  }
+
+  $raw = Get-ConfigValue $Config $Name $rule.default
+  $value = 0
+  if (-not [int]::TryParse([string]$raw, [ref]$value)) {
+    throw "Invalid config value: $Name must be an integer between $($rule.min) and $($rule.max); current=$raw"
+  }
+  if ($value -lt $rule.min -or $value -gt $rule.max) {
+    throw "Invalid config value: $Name must be between $($rule.min) and $($rule.max); current=$value"
+  }
+
+  return $value
+}
+
+function Assert-NumericConfig {
+  param($Config)
+
+  foreach ($name in $NumericConfigRules.Keys) {
+    [void](Get-ConfigInt $Config $name)
+  }
+}
+
 function Get-PlainPassword {
   param([string]$Prompt)
   $secure = Read-Host $Prompt -AsSecureString
@@ -237,6 +275,14 @@ function Assert-LoginConfig {
 
   if (-not (Test-Path -LiteralPath $config.watch_dir)) {
     $message = "login config invalid: watch directory not found: $($config.watch_dir). Please run login again with -WatchDir."
+    Write-UploaderLog $message
+    throw $message
+  }
+
+  try {
+    Assert-NumericConfig $config
+  } catch {
+    $message = "$($_.Exception.Message). Please run login again or update the setting with a valid command-line parameter."
     Write-UploaderLog $message
     throw $message
   }
@@ -274,7 +320,7 @@ function Assert-LoginConfig {
 
   try {
     $headers = @{ Authorization = "Bearer $($config.token)" }
-    $result = Invoke-RestMethod -Uri "$serverUrl/auth/me" -Method Get -Headers $headers -TimeoutSec ([int](Get-ConfigValue $config "timeout_seconds" $TimeoutSeconds))
+    $result = Invoke-RestMethod -Uri "$serverUrl/auth/me" -Method Get -Headers $headers -TimeoutSec (Get-ConfigInt $config "timeout_seconds")
     if (-not $result.authenticated) {
       throw "server returned unauthenticated response"
     }
@@ -464,7 +510,7 @@ function Invoke-UploadFile {
   $content = [System.Net.Http.MultipartFormDataContent]::new()
   $stream = $null
   try {
-    $client.Timeout = [TimeSpan]::FromSeconds([Math]::Max(10, [int](Get-ConfigValue $Config "timeout_seconds" $TimeoutSeconds)))
+    $client.Timeout = [TimeSpan]::FromSeconds((Get-ConfigInt $Config "timeout_seconds"))
     $client.DefaultRequestHeaders.Authorization = [System.Net.Http.Headers.AuthenticationHeaderValue]::new("Bearer", [string]$Config.token)
     $content.Add([System.Net.Http.StringContent]::new([string]$Config.department), "department")
     $stationName = Resolve-PhotoStation $Config $File
@@ -499,8 +545,8 @@ function Invoke-UploadFile {
 function Invoke-UploadFileWithRetry {
   param($Config, [System.IO.FileInfo]$File)
 
-  $attempts = [Math]::Max(1, [int](Get-ConfigValue $Config "retry_count" $RetryCount))
-  $delaySeconds = [Math]::Max(1, [int](Get-ConfigValue $Config "retry_delay_seconds" $RetryDelaySeconds))
+  $attempts = Get-ConfigInt $Config "retry_count"
+  $delaySeconds = Get-ConfigInt $Config "retry_delay_seconds"
 
   for ($attempt = 1; $attempt -le $attempts; $attempt += 1) {
     try {
@@ -548,7 +594,7 @@ function Invoke-ScanOnce {
       if ($stateMap.ContainsKey($key)) {
         continue
       }
-      if (-not (Test-StableFile $file ([int](Get-ConfigValue $config "stable_seconds" $StableSeconds)))) {
+      if (-not (Test-StableFile $file (Get-ConfigInt $config "stable_seconds"))) {
         continue
       }
       if ($file.Length -gt $MaxUploadBytes) {
@@ -585,7 +631,7 @@ function Start-RunLoop {
   Update-ConfigFromParameters
   $config = Assert-LoginConfig
 
-  $interval = [int](Get-ConfigValue $config "interval_seconds" $IntervalSeconds)
+  $interval = Get-ConfigInt $config "interval_seconds"
   if ($IntervalSeconds -gt 0 -and $PSBoundParameters.ContainsKey("IntervalSeconds")) {
     $interval = $IntervalSeconds
   }
@@ -653,11 +699,11 @@ function Start-HiddenUploader {
   $config = Assert-LoginConfig
   $script = $PSCommandPath
   $stopped = Stop-ExistingUploaderProcesses
-  $runIntervalSeconds = [int](Get-ConfigValue $config "interval_seconds" $IntervalSeconds)
-  $runStableSeconds = [int](Get-ConfigValue $config "stable_seconds" $StableSeconds)
-  $runTimeoutSeconds = [int](Get-ConfigValue $config "timeout_seconds" $TimeoutSeconds)
-  $runRetryCount = [int](Get-ConfigValue $config "retry_count" $RetryCount)
-  $runRetryDelaySeconds = [int](Get-ConfigValue $config "retry_delay_seconds" $RetryDelaySeconds)
+  $runIntervalSeconds = Get-ConfigInt $config "interval_seconds"
+  $runStableSeconds = Get-ConfigInt $config "stable_seconds"
+  $runTimeoutSeconds = Get-ConfigInt $config "timeout_seconds"
+  $runRetryCount = Get-ConfigInt $config "retry_count"
+  $runRetryDelaySeconds = Get-ConfigInt $config "retry_delay_seconds"
   Start-Process -FilePath "powershell.exe" -ArgumentList @(
     "-NoProfile",
     "-ExecutionPolicy", "Bypass",
@@ -735,12 +781,22 @@ function Redact-SensitiveText {
   return $redacted
 }
 
+function Write-DoctorConfigInt {
+  param($Config, [string]$Name)
+
+  try {
+    Write-DoctorLine "ok" "$Name=$(Get-ConfigInt $Config $Name)"
+  } catch {
+    Write-DoctorLine "fail" (Redact-SensitiveText $_.Exception.Message)
+  }
+}
+
 function Get-RecentProblemLogLines {
   if (-not (Test-Path -LiteralPath $LogFile)) {
     return @()
   }
   @(Get-Content -LiteralPath $LogFile -Tail 80 -Encoding UTF8 | Where-Object {
-    $_ -match "failed|error|timeout|denied|invalid|not found"
+    $_ -match "failed|error|timeout|denied|invalid|not found|unauthorized"
   } | Select-Object -Last 8 | ForEach-Object {
     Redact-SensitiveText $_
   })
@@ -800,7 +856,7 @@ function Invoke-Doctor {
       if ($serverUrl) {
         try {
           $headers = @{ Authorization = "Bearer $token" }
-          $result = Invoke-RestMethod -Uri "$serverUrl/auth/me" -Method Get -Headers $headers -TimeoutSec ([int](Get-ConfigValue $config "timeout_seconds" $TimeoutSeconds))
+          $result = Invoke-RestMethod -Uri "$serverUrl/auth/me" -Method Get -Headers $headers -TimeoutSec (Get-ConfigInt $config "timeout_seconds")
           if ($result.authenticated) {
             Write-DoctorLine "ok" "login token accepted by server"
           } else {
@@ -814,11 +870,11 @@ function Invoke-Doctor {
       }
     }
 
-    Write-DoctorLine "ok" "interval_seconds=$(Get-ConfigValue $config "interval_seconds" $IntervalSeconds)"
-    Write-DoctorLine "ok" "stable_seconds=$(Get-ConfigValue $config "stable_seconds" $StableSeconds)"
-    Write-DoctorLine "ok" "timeout_seconds=$(Get-ConfigValue $config "timeout_seconds" $TimeoutSeconds)"
-    Write-DoctorLine "ok" "retry_count=$(Get-ConfigValue $config "retry_count" $RetryCount)"
-    Write-DoctorLine "ok" "retry_delay_seconds=$(Get-ConfigValue $config "retry_delay_seconds" $RetryDelaySeconds)"
+    Write-DoctorConfigInt $config "interval_seconds"
+    Write-DoctorConfigInt $config "stable_seconds"
+    Write-DoctorConfigInt $config "timeout_seconds"
+    Write-DoctorConfigInt $config "retry_count"
+    Write-DoctorConfigInt $config "retry_delay_seconds"
     Write-DoctorLine "ok" "include_subdirectories=$(Get-ConfigValue $config "include_subdirectories" $true)"
   }
 
