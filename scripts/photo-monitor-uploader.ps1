@@ -1,6 +1,6 @@
 ﻿param(
   [Parameter(Position = 0)]
-  [ValidateSet("login", "run", "once", "status", "logs", "start-hidden", "install-startup", "test-notification")]
+  [ValidateSet("login", "run", "once", "status", "logs", "start-hidden", "install-startup", "test-notification", "doctor")]
   [string]$Command = "status",
 
   [string]$Server = "http://121.43.132.227",
@@ -9,10 +9,18 @@
   [string]$Department = "",
   [string]$Station = "uploads",
   [string]$WatchDir = "C:\Users\QiyanShi\Desktop\photo-monitor\photo-backend\",
+  [ValidateRange(5, 86400)]
   [int]$IntervalSeconds = 60,
+  [ValidateRange(0, 3600)]
   [int]$StableSeconds = 10,
+  [ValidateRange(10, 3600)]
   [int]$TimeoutSeconds = 120,
+  [ValidateRange(1, 1000)]
   [int]$TailLines = 80,
+  [ValidateRange(1, 10)]
+  [int]$RetryCount = 3,
+  [ValidateRange(1, 300)]
+  [int]$RetryDelaySeconds = 5,
   [switch]$NoSubdirectories,
   [switch]$DryRun
 )
@@ -27,6 +35,7 @@ $KnownPhotoStations = @("xiazhan", "shangzhan")
 $MaxUploadBytes = 200MB
 $MaxLogBytes = 5MB
 $MutexName = "Global\PhotoMonitorUploader"
+$SafePathPartPattern = '^[^<>:"/\\|?*\x00-\x1f]+$'
 
 function Get-AppDir {
   $candidates = @()
@@ -73,6 +82,16 @@ function Write-UploaderLog {
   if ($Host.Name -ne "Default Host") {
     Write-Host $line
   }
+}
+
+function Format-ExceptionMessage {
+  param($ErrorRecord)
+
+  $exception = $ErrorRecord.Exception
+  if ($exception.InnerException) {
+    return "$($exception.Message) inner=$($exception.InnerException.Message)"
+  }
+  return $exception.Message
 }
 
 function Show-UploaderNotification {
@@ -126,11 +145,20 @@ function Read-JsonFile {
   if (-not (Test-Path -LiteralPath $Path)) {
     return $DefaultValue
   }
-  return Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+  try {
+    return Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+  } catch {
+    Write-UploaderLog "json read failed: path=$Path error=$(Format-ExceptionMessage $_)"
+    return $DefaultValue
+  }
 }
 
 function Save-JsonFile {
   param($Path, $Value)
+  $dir = Split-Path -Parent $Path
+  if ($dir) {
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+  }
   $json = $Value | ConvertTo-Json -Depth 10
   $temp = "$Path.tmp"
   Set-Content -LiteralPath $temp -Value $json -Encoding UTF8
@@ -139,7 +167,22 @@ function Save-JsonFile {
 
 function Normalize-Server {
   param([string]$Value)
-  return $Value.TrimEnd("/")
+  $trimmed = $Value.Trim().TrimEnd("/")
+  if (-not $trimmed) {
+    throw "Server is required."
+  }
+
+  try {
+    $uri = [Uri]$trimmed
+  } catch {
+    throw "Server is not a valid URI: $Value"
+  }
+
+  if ($uri.Scheme -notin @("http", "https")) {
+    throw "Server must start with http:// or https://"
+  }
+
+  return $trimmed
 }
 
 function Get-ConfigValue {
@@ -205,6 +248,19 @@ function Assert-LoginConfig {
   return $config
 }
 
+function Assert-SafePathPart {
+  param([string]$Name, [string]$Value)
+
+  $normalized = $Value.Trim()
+  if (-not $normalized) {
+    throw "$Name is required."
+  }
+  if ($normalized -notmatch $SafePathPartPattern -or $normalized -in @(".", "..")) {
+    throw "$Name contains invalid path characters: $Value"
+  }
+  return $normalized
+}
+
 function Update-ConfigFromParameters {
   $config = Read-JsonFile $ConfigFile $null
   if (-not $config) {
@@ -224,11 +280,11 @@ function Update-ConfigFromParameters {
     $changed = $true
   }
   if ($Script:StartupParameters.ContainsKey("Department")) {
-    $config.department = $Department
+    $config.department = Assert-SafePathPart "Department" $Department
     $changed = $true
   }
   if ($Script:StartupParameters.ContainsKey("Station")) {
-    $config.station = $Station
+    $config.station = Assert-SafePathPart "Station" $Station
     $changed = $true
   }
   if ($Script:StartupParameters.ContainsKey("IntervalSeconds")) {
@@ -241,6 +297,14 @@ function Update-ConfigFromParameters {
   }
   if ($Script:StartupParameters.ContainsKey("TimeoutSeconds")) {
     $config.timeout_seconds = $TimeoutSeconds
+    $changed = $true
+  }
+  if ($Script:StartupParameters.ContainsKey("RetryCount")) {
+    $config.retry_count = $RetryCount
+    $changed = $true
+  }
+  if ($Script:StartupParameters.ContainsKey("RetryDelaySeconds")) {
+    $config.retry_delay_seconds = $RetryDelaySeconds
     $changed = $true
   }
   if ($Script:StartupParameters.ContainsKey("NoSubdirectories")) {
@@ -281,6 +345,8 @@ function Invoke-Login {
   if (-not $Department) {
     throw "Department is required."
   }
+  $Department = Assert-SafePathPart "Department" $Department
+  $Station = Assert-SafePathPart "Station" $Station
 
   $config = [ordered]@{
     server = $serverUrl
@@ -293,6 +359,8 @@ function Invoke-Login {
     interval_seconds = $IntervalSeconds
     stable_seconds = $StableSeconds
     timeout_seconds = $TimeoutSeconds
+    retry_count = $RetryCount
+    retry_delay_seconds = $RetryDelaySeconds
     include_subdirectories = (-not $NoSubdirectories.IsPresent)
   }
   Save-JsonFile $ConfigFile $config
@@ -314,7 +382,7 @@ function Test-StableFile {
 function Resolve-PhotoStation {
   param($Config, [System.IO.FileInfo]$File)
 
-  $configuredStation = [string](Get-ConfigValue $Config "station" "uploads")
+  $configuredStation = Assert-SafePathPart "Station" ([string](Get-ConfigValue $Config "station" "uploads"))
   foreach ($part in $File.FullName.Split([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)) {
     if ($KnownPhotoStations -contains $part.ToLowerInvariant()) {
       return $part.ToLowerInvariant()
@@ -364,16 +432,47 @@ function Invoke-UploadFile {
     $fileContent = [System.Net.Http.StreamContent]::new($stream)
     $content.Add($fileContent, "file", $File.Name)
 
-    $response = $client.PostAsync("$($Config.server)/uploads", $content).Result
-    $text = $response.Content.ReadAsStringAsync().Result
+    $response = $client.PostAsync("$($Config.server)/uploads", $content).GetAwaiter().GetResult()
+    $text = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
     if (-not $response.IsSuccessStatusCode) {
-      throw "HTTP $([int]$response.StatusCode): $text"
+      $detail = $text
+      try {
+        $errorPayload = $text | ConvertFrom-Json
+        if ($errorPayload.detail) {
+          $detail = $errorPayload.detail
+        }
+      } catch {
+        $detail = $text
+      }
+      throw "HTTP $([int]$response.StatusCode): $detail"
     }
     return $text | ConvertFrom-Json
   } finally {
     if ($stream) { $stream.Dispose() }
     $content.Dispose()
     $client.Dispose()
+  }
+}
+
+function Invoke-UploadFileWithRetry {
+  param($Config, [System.IO.FileInfo]$File)
+
+  $attempts = [Math]::Max(1, [int](Get-ConfigValue $Config "retry_count" $RetryCount))
+  $delaySeconds = [Math]::Max(1, [int](Get-ConfigValue $Config "retry_delay_seconds" $RetryDelaySeconds))
+
+  for ($attempt = 1; $attempt -le $attempts; $attempt += 1) {
+    try {
+      if ($attempt -gt 1) {
+        Write-UploaderLog "upload retrying: attempt=$attempt/$attempts file=$($File.FullName)"
+      }
+      return Invoke-UploadFile $Config $File
+    } catch {
+      if ($attempt -ge $attempts) {
+        throw
+      }
+      Write-UploaderLog "upload attempt failed: attempt=$attempt/$attempts file=$($File.FullName) error=$(Format-ExceptionMessage $_)"
+      Start-Sleep -Seconds $delaySeconds
+    }
   }
 }
 
@@ -420,7 +519,7 @@ function Invoke-ScanOnce {
         continue
       }
 
-      $result = Invoke-UploadFile $config $file
+      $result = Invoke-UploadFileWithRetry $config $file
       $stateMap[$key] = [ordered]@{
         path = $file.FullName
         target = "photo"
@@ -433,7 +532,7 @@ function Invoke-ScanOnce {
       Write-UploaderLog "uploaded: $($file.FullName)"
       Show-UploaderNotification "照片上传成功" "$($file.Name) 已上传到 $($stateMap[$key].station)"
     } catch {
-      Write-UploaderLog "upload failed: $($file.FullName) error=$($_.Exception.Message)"
+      Write-UploaderLog "upload failed: $($file.FullName) error=$(Format-ExceptionMessage $_)"
     }
   }
 
@@ -507,14 +606,24 @@ function Stop-ExistingUploaderProcesses {
 
 function Start-HiddenUploader {
   Update-ConfigFromParameters
-  Assert-LoginConfig | Out-Null
+  $config = Assert-LoginConfig
   $script = $PSCommandPath
   $stopped = Stop-ExistingUploaderProcesses
+  $runIntervalSeconds = [int](Get-ConfigValue $config "interval_seconds" $IntervalSeconds)
+  $runStableSeconds = [int](Get-ConfigValue $config "stable_seconds" $StableSeconds)
+  $runTimeoutSeconds = [int](Get-ConfigValue $config "timeout_seconds" $TimeoutSeconds)
+  $runRetryCount = [int](Get-ConfigValue $config "retry_count" $RetryCount)
+  $runRetryDelaySeconds = [int](Get-ConfigValue $config "retry_delay_seconds" $RetryDelaySeconds)
   Start-Process -FilePath "powershell.exe" -ArgumentList @(
     "-NoProfile",
     "-ExecutionPolicy", "Bypass",
     "-File", "`"$script`"",
-    "run"
+    "run",
+    "-IntervalSeconds", "$runIntervalSeconds",
+    "-StableSeconds", "$runStableSeconds",
+    "-TimeoutSeconds", "$runTimeoutSeconds",
+    "-RetryCount", "$runRetryCount",
+    "-RetryDelaySeconds", "$runRetryDelaySeconds"
   ) -WindowStyle Hidden
   Write-UploaderLog "uploader started in background: stopped_previous=$stopped"
   Write-Host "Uploader started in background. Previous uploader processes stopped: $stopped"
@@ -550,6 +659,9 @@ function Show-Status {
   Write-Host "watch_dir: $($config.watch_dir)"
   Write-Host "interval_seconds: $(Get-ConfigValue $config "interval_seconds" $IntervalSeconds)"
   Write-Host "stable_seconds: $(Get-ConfigValue $config "stable_seconds" $StableSeconds)"
+  Write-Host "timeout_seconds: $(Get-ConfigValue $config "timeout_seconds" $TimeoutSeconds)"
+  Write-Host "retry_count: $(Get-ConfigValue $config "retry_count" $RetryCount)"
+  Write-Host "retry_delay_seconds: $(Get-ConfigValue $config "retry_delay_seconds" $RetryDelaySeconds)"
   Write-Host "include_subdirectories: $(Get-ConfigValue $config "include_subdirectories" $true)"
   Write-Host "uploaded records: $count"
 }
@@ -586,4 +698,5 @@ switch ($Command) {
   "start-hidden" { Start-HiddenUploader }
   "install-startup" { Install-Startup }
   "test-notification" { Invoke-TestNotification }
+  "doctor" { Show-Status }
 }
