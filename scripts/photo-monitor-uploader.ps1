@@ -218,7 +218,7 @@ function Get-PlainPassword {
 }
 
 function Assert-LoginConfig {
-  param([switch]$Quiet)
+  param([switch]$Quiet, [switch]$SkipServerCheck)
 
   $config = Read-JsonFile $ConfigFile $null
   if (-not $config) {
@@ -263,6 +263,13 @@ function Assert-LoginConfig {
   if ($changed) {
     Save-JsonFile $ConfigFile $config
     Write-UploaderLog "login config normalized: server=$($config.server) department=$($config.department) station=$($config.station)"
+  }
+
+  if ($SkipServerCheck) {
+    if (-not $Quiet) {
+      Write-UploaderLog "login config check skipped server validation: user=$($config.username) watch_dir=$($config.watch_dir)"
+    }
+    return $config
   }
 
   try {
@@ -513,7 +520,7 @@ function Invoke-UploadFileWithRetry {
 
 function Invoke-ScanOnce {
   Update-ConfigFromParameters
-  $config = Assert-LoginConfig -Quiet
+  $config = Assert-LoginConfig -Quiet -SkipServerCheck:$DryRun
 
   $state = Read-JsonFile $StateFile ([pscustomobject]@{})
   $stateMap = @{}
