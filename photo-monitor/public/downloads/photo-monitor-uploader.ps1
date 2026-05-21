@@ -1,6 +1,6 @@
 ﻿param(
   [Parameter(Position = 0)]
-  [ValidateSet("login", "run", "once", "status", "start-hidden", "install-startup", "test-notification")]
+  [ValidateSet("login", "run", "once", "status", "logs", "start-hidden", "install-startup", "test-notification", "doctor")]
   [string]$Command = "status",
 
   [string]$Server = "http://121.43.132.227",
@@ -9,9 +9,18 @@
   [string]$Department = "",
   [string]$Station = "uploads",
   [string]$WatchDir = "C:\Users\QiyanShi\Desktop\photo-monitor\photo-backend\",
+  [ValidateRange(5, 86400)]
   [int]$IntervalSeconds = 60,
+  [ValidateRange(0, 3600)]
   [int]$StableSeconds = 10,
+  [ValidateRange(10, 3600)]
   [int]$TimeoutSeconds = 120,
+  [ValidateRange(1, 1000)]
+  [int]$TailLines = 80,
+  [ValidateRange(1, 10)]
+  [int]$RetryCount = 3,
+  [ValidateRange(1, 300)]
+  [int]$RetryDelaySeconds = 5,
   [switch]$NoSubdirectories,
   [switch]$DryRun
 )
@@ -26,6 +35,14 @@ $KnownPhotoStations = @("xiazhan", "shangzhan")
 $MaxUploadBytes = 200MB
 $MaxLogBytes = 5MB
 $MutexName = "Global\PhotoMonitorUploader"
+$SafePathPartPattern = '^[^<>:"/\\|?*\x00-\x1f]+$'
+$NumericConfigRules = [ordered]@{
+  interval_seconds = @{ default = $IntervalSeconds; min = 5; max = 86400 }
+  stable_seconds = @{ default = $StableSeconds; min = 0; max = 3600 }
+  timeout_seconds = @{ default = $TimeoutSeconds; min = 10; max = 3600 }
+  retry_count = @{ default = $RetryCount; min = 1; max = 10 }
+  retry_delay_seconds = @{ default = $RetryDelaySeconds; min = 1; max = 300 }
+}
 
 function Get-AppDir {
   $candidates = @()
@@ -59,16 +76,41 @@ $LogFile = Join-Path $AppDir "uploader.log"
 
 function Write-UploaderLog {
   param([string]$Message)
-  if ((Test-Path -LiteralPath $LogFile) -and (Get-Item -LiteralPath $LogFile).Length -gt $MaxLogBytes) {
-    $archive = "$LogFile.$(Get-Date -Format 'yyyyMMddHHmmss').old"
-    Move-Item -LiteralPath $LogFile -Destination $archive -Force
-  }
-
   $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $Message"
-  Add-Content -LiteralPath $LogFile -Value $line -Encoding UTF8
+  try {
+    if ((Test-Path -LiteralPath $LogFile) -and (Get-Item -LiteralPath $LogFile).Length -gt $MaxLogBytes) {
+      $archive = "$LogFile.$(Get-Date -Format 'yyyyMMddHHmmss').old"
+      Move-Item -LiteralPath $LogFile -Destination $archive -Force
+    }
+    Add-Content -LiteralPath $LogFile -Value $line -Encoding UTF8
+  } catch {
+    Write-Host "log write failed: $($_.Exception.Message)"
+  }
   if ($Host.Name -ne "Default Host") {
     Write-Host $line
   }
+}
+
+function Format-ExceptionMessage {
+  param($ErrorRecord)
+
+  if ($null -eq $ErrorRecord) {
+    return ""
+  }
+
+  $exception = $ErrorRecord.Exception
+  if (-not $exception) {
+    if ($ErrorRecord -is [System.Exception]) {
+      $exception = $ErrorRecord
+    } else {
+      return [string]$ErrorRecord
+    }
+  }
+
+  if ($exception.InnerException) {
+    return "$($exception.Message) inner=$($exception.InnerException.Message)"
+  }
+  return $exception.Message
 }
 
 function Show-UploaderNotification {
@@ -122,11 +164,20 @@ function Read-JsonFile {
   if (-not (Test-Path -LiteralPath $Path)) {
     return $DefaultValue
   }
-  return Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+  try {
+    return Get-Content -LiteralPath $Path -Raw -Encoding UTF8 | ConvertFrom-Json
+  } catch {
+    Write-UploaderLog "json read failed: path=$Path error=$(Format-ExceptionMessage $_)"
+    return $DefaultValue
+  }
 }
 
 function Save-JsonFile {
   param($Path, $Value)
+  $dir = Split-Path -Parent $Path
+  if ($dir) {
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+  }
   $json = $Value | ConvertTo-Json -Depth 10
   $temp = "$Path.tmp"
   Set-Content -LiteralPath $temp -Value $json -Encoding UTF8
@@ -135,7 +186,22 @@ function Save-JsonFile {
 
 function Normalize-Server {
   param([string]$Value)
-  return $Value.TrimEnd("/")
+  $trimmed = $Value.Trim().TrimEnd("/")
+  if (-not $trimmed) {
+    throw "Server is required."
+  }
+
+  try {
+    $uri = [Uri]$trimmed
+  } catch {
+    throw "Server is not a valid URI: $Value"
+  }
+
+  if ($uri.Scheme -notin @("http", "https")) {
+    throw "Server must start with http:// or https://"
+  }
+
+  return $trimmed
 }
 
 function Get-ConfigValue {
@@ -145,6 +211,37 @@ function Get-ConfigValue {
     return $property.Value
   }
   return $DefaultValue
+}
+
+function Get-ConfigInt {
+  param(
+    $Config,
+    [string]$Name
+  )
+
+  $rule = $NumericConfigRules[$Name]
+  if (-not $rule) {
+    throw "Unknown numeric config setting: $Name"
+  }
+
+  $raw = Get-ConfigValue $Config $Name $rule.default
+  $value = 0
+  if (-not [int]::TryParse([string]$raw, [ref]$value)) {
+    throw "Invalid config value: $Name must be an integer between $($rule.min) and $($rule.max); current=$raw"
+  }
+  if ($value -lt $rule.min -or $value -gt $rule.max) {
+    throw "Invalid config value: $Name must be between $($rule.min) and $($rule.max); current=$value"
+  }
+
+  return $value
+}
+
+function Assert-NumericConfig {
+  param($Config)
+
+  foreach ($name in $NumericConfigRules.Keys) {
+    [void](Get-ConfigInt $Config $name)
+  }
 }
 
 function Get-PlainPassword {
@@ -159,7 +256,7 @@ function Get-PlainPassword {
 }
 
 function Assert-LoginConfig {
-  param([switch]$Quiet)
+  param([switch]$Quiet, [switch]$SkipServerCheck)
 
   $config = Read-JsonFile $ConfigFile $null
   if (-not $config) {
@@ -183,9 +280,47 @@ function Assert-LoginConfig {
   }
 
   try {
+    Assert-NumericConfig $config
+  } catch {
+    $message = "$($_.Exception.Message). Please run login again or update the setting with a valid command-line parameter."
+    Write-UploaderLog $message
+    throw $message
+  }
+
+  $changed = $false
+  $serverUrl = Normalize-Server ([string]$config.server)
+  if ([string]$config.server -ne $serverUrl) {
+    $config.server = $serverUrl
+    $changed = $true
+  }
+
+  $department = Assert-SafePathPart "Department" ([string]$config.department)
+  if ([string]$config.department -ne $department) {
+    $config.department = $department
+    $changed = $true
+  }
+
+  $station = Assert-SafePathPart "Station" ([string](Get-ConfigValue $config "station" "uploads"))
+  if (-not $config.PSObject.Properties["station"] -or [string]$config.station -ne $station) {
+    $config.station = $station
+    $changed = $true
+  }
+
+  if ($changed) {
+    Save-JsonFile $ConfigFile $config
+    Write-UploaderLog "login config normalized: server=$($config.server) department=$($config.department) station=$($config.station)"
+  }
+
+  if ($SkipServerCheck) {
+    if (-not $Quiet) {
+      Write-UploaderLog "login config check skipped server validation: user=$($config.username) watch_dir=$($config.watch_dir)"
+    }
+    return $config
+  }
+
+  try {
     $headers = @{ Authorization = "Bearer $($config.token)" }
-    $serverUrl = Normalize-Server ([string]$config.server)
-    $result = Invoke-RestMethod -Uri "$serverUrl/auth/me" -Method Get -Headers $headers -TimeoutSec ([int](Get-ConfigValue $config "timeout_seconds" $TimeoutSeconds))
+    $result = Invoke-RestMethod -Uri "$serverUrl/auth/me" -Method Get -Headers $headers -TimeoutSec (Get-ConfigInt $config "timeout_seconds")
     if (-not $result.authenticated) {
       throw "server returned unauthenticated response"
     }
@@ -199,6 +334,19 @@ function Assert-LoginConfig {
   }
 
   return $config
+}
+
+function Assert-SafePathPart {
+  param([string]$Name, [string]$Value)
+
+  $normalized = $Value.Trim()
+  if (-not $normalized) {
+    throw "$Name is required."
+  }
+  if ($normalized -notmatch $SafePathPartPattern -or $normalized -in @(".", "..")) {
+    throw "$Name contains invalid path characters: $Value"
+  }
+  return $normalized
 }
 
 function Update-ConfigFromParameters {
@@ -220,11 +368,11 @@ function Update-ConfigFromParameters {
     $changed = $true
   }
   if ($Script:StartupParameters.ContainsKey("Department")) {
-    $config.department = $Department
+    $config.department = Assert-SafePathPart "Department" $Department
     $changed = $true
   }
   if ($Script:StartupParameters.ContainsKey("Station")) {
-    $config.station = $Station
+    $config.station = Assert-SafePathPart "Station" $Station
     $changed = $true
   }
   if ($Script:StartupParameters.ContainsKey("IntervalSeconds")) {
@@ -237,6 +385,14 @@ function Update-ConfigFromParameters {
   }
   if ($Script:StartupParameters.ContainsKey("TimeoutSeconds")) {
     $config.timeout_seconds = $TimeoutSeconds
+    $changed = $true
+  }
+  if ($Script:StartupParameters.ContainsKey("RetryCount")) {
+    $config.retry_count = $RetryCount
+    $changed = $true
+  }
+  if ($Script:StartupParameters.ContainsKey("RetryDelaySeconds")) {
+    $config.retry_delay_seconds = $RetryDelaySeconds
     $changed = $true
   }
   if ($Script:StartupParameters.ContainsKey("NoSubdirectories")) {
@@ -277,6 +433,8 @@ function Invoke-Login {
   if (-not $Department) {
     throw "Department is required."
   }
+  $Department = Assert-SafePathPart "Department" $Department
+  $Station = Assert-SafePathPart "Station" $Station
 
   $config = [ordered]@{
     server = $serverUrl
@@ -289,6 +447,8 @@ function Invoke-Login {
     interval_seconds = $IntervalSeconds
     stable_seconds = $StableSeconds
     timeout_seconds = $TimeoutSeconds
+    retry_count = $RetryCount
+    retry_delay_seconds = $RetryDelaySeconds
     include_subdirectories = (-not $NoSubdirectories.IsPresent)
   }
   Save-JsonFile $ConfigFile $config
@@ -310,7 +470,7 @@ function Test-StableFile {
 function Resolve-PhotoStation {
   param($Config, [System.IO.FileInfo]$File)
 
-  $configuredStation = [string](Get-ConfigValue $Config "station" "uploads")
+  $configuredStation = Assert-SafePathPart "Station" ([string](Get-ConfigValue $Config "station" "uploads"))
   foreach ($part in $File.FullName.Split([System.IO.Path]::DirectorySeparatorChar, [System.IO.Path]::AltDirectorySeparatorChar)) {
     if ($KnownPhotoStations -contains $part.ToLowerInvariant()) {
       return $part.ToLowerInvariant()
@@ -350,7 +510,7 @@ function Invoke-UploadFile {
   $content = [System.Net.Http.MultipartFormDataContent]::new()
   $stream = $null
   try {
-    $client.Timeout = [TimeSpan]::FromSeconds([Math]::Max(10, [int](Get-ConfigValue $Config "timeout_seconds" $TimeoutSeconds)))
+    $client.Timeout = [TimeSpan]::FromSeconds((Get-ConfigInt $Config "timeout_seconds"))
     $client.DefaultRequestHeaders.Authorization = [System.Net.Http.Headers.AuthenticationHeaderValue]::new("Bearer", [string]$Config.token)
     $content.Add([System.Net.Http.StringContent]::new([string]$Config.department), "department")
     $stationName = Resolve-PhotoStation $Config $File
@@ -360,10 +520,19 @@ function Invoke-UploadFile {
     $fileContent = [System.Net.Http.StreamContent]::new($stream)
     $content.Add($fileContent, "file", $File.Name)
 
-    $response = $client.PostAsync("$($Config.server)/uploads", $content).Result
-    $text = $response.Content.ReadAsStringAsync().Result
+    $response = $client.PostAsync("$($Config.server)/uploads", $content).GetAwaiter().GetResult()
+    $text = $response.Content.ReadAsStringAsync().GetAwaiter().GetResult()
     if (-not $response.IsSuccessStatusCode) {
-      throw "HTTP $([int]$response.StatusCode): $text"
+      $detail = $text
+      try {
+        $errorPayload = $text | ConvertFrom-Json
+        if ($errorPayload.detail) {
+          $detail = $errorPayload.detail
+        }
+      } catch {
+        $detail = $text
+      }
+      throw "HTTP $([int]$response.StatusCode): $detail"
     }
     return $text | ConvertFrom-Json
   } finally {
@@ -373,9 +542,31 @@ function Invoke-UploadFile {
   }
 }
 
+function Invoke-UploadFileWithRetry {
+  param($Config, [System.IO.FileInfo]$File)
+
+  $attempts = Get-ConfigInt $Config "retry_count"
+  $delaySeconds = Get-ConfigInt $Config "retry_delay_seconds"
+
+  for ($attempt = 1; $attempt -le $attempts; $attempt += 1) {
+    try {
+      if ($attempt -gt 1) {
+        Write-UploaderLog "upload retrying: attempt=$attempt/$attempts file=$($File.FullName)"
+      }
+      return Invoke-UploadFile $Config $File
+    } catch {
+      if ($attempt -ge $attempts) {
+        throw
+      }
+      Write-UploaderLog "upload attempt failed: attempt=$attempt/$attempts file=$($File.FullName) error=$(Format-ExceptionMessage $_)"
+      Start-Sleep -Seconds $delaySeconds
+    }
+  }
+}
+
 function Invoke-ScanOnce {
   Update-ConfigFromParameters
-  $config = Assert-LoginConfig -Quiet
+  $config = Assert-LoginConfig -Quiet -SkipServerCheck:$DryRun
 
   $state = Read-JsonFile $StateFile ([pscustomobject]@{})
   $stateMap = @{}
@@ -385,8 +576,17 @@ function Invoke-ScanOnce {
 
   $extensions = $PhotoExtensions
   $uploaded = 0
-  $files = @(Get-WatchedFiles $config $extensions)
-  Write-UploaderLog "scan started: files=$($files.Count) include_subdirectories=$(Get-ConfigValue $config "include_subdirectories" $true) watch_dir=$($config.watch_dir)"
+  $includeSubdirectories = [bool](Get-ConfigValue $config "include_subdirectories" $true)
+  Write-UploaderLog "scan starting: include_subdirectories=$includeSubdirectories watch_dir=$($config.watch_dir)"
+  $scanStartedAt = Get-Date
+  try {
+    $files = @(Get-WatchedFiles $config $extensions)
+  } catch {
+    Write-UploaderLog "scan enumerate failed: watch_dir=$($config.watch_dir) error=$($_.Exception.Message)"
+    throw
+  }
+  $scanElapsedMs = [int](((Get-Date) - $scanStartedAt).TotalMilliseconds)
+  Write-UploaderLog "scan started: files=$($files.Count) elapsed_ms=$scanElapsedMs include_subdirectories=$includeSubdirectories watch_dir=$($config.watch_dir)"
 
   foreach ($file in $files) {
     try {
@@ -394,7 +594,7 @@ function Invoke-ScanOnce {
       if ($stateMap.ContainsKey($key)) {
         continue
       }
-      if (-not (Test-StableFile $file ([int](Get-ConfigValue $config "stable_seconds" $StableSeconds)))) {
+      if (-not (Test-StableFile $file (Get-ConfigInt $config "stable_seconds"))) {
         continue
       }
       if ($file.Length -gt $MaxUploadBytes) {
@@ -407,7 +607,7 @@ function Invoke-ScanOnce {
         continue
       }
 
-      $result = Invoke-UploadFile $config $file
+      $result = Invoke-UploadFileWithRetry $config $file
       $stateMap[$key] = [ordered]@{
         path = $file.FullName
         target = "photo"
@@ -420,7 +620,7 @@ function Invoke-ScanOnce {
       Write-UploaderLog "uploaded: $($file.FullName)"
       Show-UploaderNotification "照片上传成功" "$($file.Name) 已上传到 $($stateMap[$key].station)"
     } catch {
-      Write-UploaderLog "upload failed: $($file.FullName) error=$($_.Exception.Message)"
+      Write-UploaderLog "upload failed: $($file.FullName) error=$(Format-ExceptionMessage $_)"
     }
   }
 
@@ -431,7 +631,7 @@ function Start-RunLoop {
   Update-ConfigFromParameters
   $config = Assert-LoginConfig
 
-  $interval = [int](Get-ConfigValue $config "interval_seconds" $IntervalSeconds)
+  $interval = Get-ConfigInt $config "interval_seconds"
   if ($IntervalSeconds -gt 0 -and $PSBoundParameters.ContainsKey("IntervalSeconds")) {
     $interval = $IntervalSeconds
   }
@@ -457,29 +657,9 @@ function Start-RunLoop {
 }
 
 function Stop-ExistingUploaderProcesses {
-  $script = [System.IO.Path]::GetFullPath($PSCommandPath)
-  $escapedScript = [regex]::Escape($script)
-  $currentPid = $PID
   $stopped = 0
 
-  try {
-    $processes = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'"
-  } catch {
-    $processes = Get-WmiObject Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'"
-  }
-
-  foreach ($process in $processes) {
-    if ($process.ProcessId -eq $currentPid -or -not $process.CommandLine) {
-      continue
-    }
-
-    $commandLine = [string]$process.CommandLine
-    $isSameScript = $commandLine -match $escapedScript
-    $isRunMode = $commandLine -match '(^|\s|")run("|\s|$)'
-    if (-not ($isSameScript -and $isRunMode)) {
-      continue
-    }
-
+  foreach ($process in Get-UploaderRunProcesses) {
     try {
       Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop
       $stopped += 1
@@ -492,16 +672,48 @@ function Stop-ExistingUploaderProcesses {
   return $stopped
 }
 
+function Get-UploaderRunProcesses {
+  $script = [System.IO.Path]::GetFullPath($PSCommandPath)
+  $escapedScript = [regex]::Escape($script)
+  $currentPid = $PID
+
+  try {
+    $processes = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'"
+  } catch {
+    $processes = Get-WmiObject Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'"
+  }
+
+  foreach ($process in $processes) {
+    if ($process.ProcessId -eq $currentPid -or -not $process.CommandLine) {
+      continue
+    }
+    $commandLine = [string]$process.CommandLine
+    if ($commandLine -match "(?i)(^|\s)-File\s+`"?$escapedScript`"?(\s|$)" -and $commandLine -match '(^|\s|")run("|\s|$)') {
+      $process
+    }
+  }
+}
+
 function Start-HiddenUploader {
   Update-ConfigFromParameters
-  Assert-LoginConfig | Out-Null
+  $config = Assert-LoginConfig
   $script = $PSCommandPath
   $stopped = Stop-ExistingUploaderProcesses
+  $runIntervalSeconds = Get-ConfigInt $config "interval_seconds"
+  $runStableSeconds = Get-ConfigInt $config "stable_seconds"
+  $runTimeoutSeconds = Get-ConfigInt $config "timeout_seconds"
+  $runRetryCount = Get-ConfigInt $config "retry_count"
+  $runRetryDelaySeconds = Get-ConfigInt $config "retry_delay_seconds"
   Start-Process -FilePath "powershell.exe" -ArgumentList @(
     "-NoProfile",
     "-ExecutionPolicy", "Bypass",
     "-File", "`"$script`"",
-    "run"
+    "run",
+    "-IntervalSeconds", "$runIntervalSeconds",
+    "-StableSeconds", "$runStableSeconds",
+    "-TimeoutSeconds", "$runTimeoutSeconds",
+    "-RetryCount", "$runRetryCount",
+    "-RetryDelaySeconds", "$runRetryDelaySeconds"
   ) -WindowStyle Hidden
   Write-UploaderLog "uploader started in background: stopped_previous=$stopped"
   Write-Host "Uploader started in background. Previous uploader processes stopped: $stopped"
@@ -537,8 +749,153 @@ function Show-Status {
   Write-Host "watch_dir: $($config.watch_dir)"
   Write-Host "interval_seconds: $(Get-ConfigValue $config "interval_seconds" $IntervalSeconds)"
   Write-Host "stable_seconds: $(Get-ConfigValue $config "stable_seconds" $StableSeconds)"
+  Write-Host "timeout_seconds: $(Get-ConfigValue $config "timeout_seconds" $TimeoutSeconds)"
+  Write-Host "retry_count: $(Get-ConfigValue $config "retry_count" $RetryCount)"
+  Write-Host "retry_delay_seconds: $(Get-ConfigValue $config "retry_delay_seconds" $RetryDelaySeconds)"
   Write-Host "include_subdirectories: $(Get-ConfigValue $config "include_subdirectories" $true)"
   Write-Host "uploaded records: $count"
+}
+
+function Write-DoctorLine {
+  param(
+    [ValidateSet("ok", "warn", "fail")]
+    [string]$Level,
+    [string]$Message
+  )
+
+  Write-Host "$Level  $Message"
+}
+
+function Redact-SensitiveText {
+  param([string]$Text)
+
+  if ($null -eq $Text) {
+    return ""
+  }
+
+  $redacted = $Text
+  $redacted = $redacted -replace '(?i)\bAuthorization\s*[:=]\s*Bearer\s+\S+', 'Authorization: Bearer [redacted]'
+  $redacted = $redacted -replace '(?i)\bBearer\s+[A-Za-z0-9._~+/\-=]+', 'Bearer [redacted]'
+  $redacted = $redacted -replace '(?i)("(?:token|password|passwd|pwd|secret)"\s*:\s*)"[^"]*"', '$1"[redacted]"'
+  $redacted = $redacted -replace "(?i)\b(token|password|passwd|pwd|secret)\s*=\s*(`"[^`"]*`"|'[^']*'|\S+)", '$1=[redacted]'
+  return $redacted
+}
+
+function Write-DoctorConfigInt {
+  param($Config, [string]$Name)
+
+  try {
+    Write-DoctorLine "ok" "$Name=$(Get-ConfigInt $Config $Name)"
+  } catch {
+    Write-DoctorLine "fail" (Redact-SensitiveText $_.Exception.Message)
+  }
+}
+
+function Get-RecentProblemLogLines {
+  if (-not (Test-Path -LiteralPath $LogFile)) {
+    return @()
+  }
+  @(Get-Content -LiteralPath $LogFile -Tail 80 -Encoding UTF8 | Where-Object {
+    $_ -match "failed|error|timeout|denied|invalid|not found|unauthorized"
+  } | Select-Object -Last 8 | ForEach-Object {
+    Redact-SensitiveText $_
+  })
+}
+
+function Show-Logs {
+  Write-Host "log: $LogFile"
+  if (-not (Test-Path -LiteralPath $LogFile)) {
+    Write-Host "log file does not exist yet."
+    return
+  }
+
+  Get-Content -LiteralPath $LogFile -Tail $TailLines -Encoding UTF8
+}
+
+function Invoke-Doctor {
+  Write-Host "Photo Monitor Uploader doctor"
+  Write-Host "config: $ConfigFile"
+  Write-Host "log: $LogFile"
+
+  $config = Read-JsonFile $ConfigFile $null
+  if (-not $config) {
+    Write-DoctorLine "fail" "not logged in; run login first"
+  } else {
+    Write-DoctorLine "ok" "config file exists"
+
+    foreach ($field in @("server", "token", "username", "department", "watch_dir")) {
+      if (Get-ConfigValue $config $field "") {
+        Write-DoctorLine "ok" "config field present: $field"
+      } else {
+        Write-DoctorLine "fail" "config field missing: $field"
+      }
+    }
+
+    $serverUrl = $null
+    $server = Get-ConfigValue $config "server" ""
+    if ($server) {
+      try {
+        $serverUrl = Normalize-Server ([string]$server)
+        Write-DoctorLine "ok" "server URL valid: $serverUrl"
+      } catch {
+        Write-DoctorLine "fail" "server URL invalid: $($_.Exception.Message)"
+      }
+    }
+
+    $watchDir = Get-ConfigValue $config "watch_dir" ""
+    if ($watchDir) {
+      if (Test-Path -LiteralPath $watchDir) {
+        Write-DoctorLine "ok" "watch directory exists: $watchDir"
+      } else {
+        Write-DoctorLine "fail" "watch directory not found: $watchDir"
+      }
+    }
+
+    $token = Get-ConfigValue $config "token" ""
+    if ($token) {
+      if ($serverUrl) {
+        try {
+          $headers = @{ Authorization = "Bearer $token" }
+          $result = Invoke-RestMethod -Uri "$serverUrl/auth/me" -Method Get -Headers $headers -TimeoutSec (Get-ConfigInt $config "timeout_seconds")
+          if ($result.authenticated) {
+            Write-DoctorLine "ok" "login token accepted by server"
+          } else {
+            Write-DoctorLine "fail" "login token rejected by server"
+          }
+        } catch {
+          Write-DoctorLine "fail" "login token check failed: $($_.Exception.Message)"
+        }
+      } else {
+        Write-DoctorLine "warn" "login token check skipped because server URL is invalid or missing"
+      }
+    }
+
+    Write-DoctorConfigInt $config "interval_seconds"
+    Write-DoctorConfigInt $config "stable_seconds"
+    Write-DoctorConfigInt $config "timeout_seconds"
+    Write-DoctorConfigInt $config "retry_count"
+    Write-DoctorConfigInt $config "retry_delay_seconds"
+    Write-DoctorLine "ok" "include_subdirectories=$(Get-ConfigValue $config "include_subdirectories" $true)"
+  }
+
+  if (Test-Path -LiteralPath $LogFile) {
+    Write-DoctorLine "ok" "log file exists"
+  } else {
+    Write-DoctorLine "warn" "log file does not exist yet"
+  }
+
+  $processes = @(Get-UploaderRunProcesses)
+  Write-DoctorLine "ok" "background uploader process count: $($processes.Count)"
+
+  $problemLines = @(Get-RecentProblemLogLines)
+  if ($problemLines.Count -gt 0) {
+    Write-DoctorLine "warn" "recent problem log lines:"
+    foreach ($line in $problemLines) {
+      Write-Host "  $line"
+    }
+  } else {
+    Write-DoctorLine "ok" "no recent problem log lines"
+  }
 }
 
 function Invoke-TestNotification {
@@ -549,9 +906,19 @@ function Invoke-TestNotification {
 switch ($Command) {
   "login" { Invoke-Login }
   "run" { Start-RunLoop }
-  "once" { $count = Invoke-ScanOnce; Write-Host "uploaded $count file(s)" }
+  "once" {
+    try {
+      $count = Invoke-ScanOnce
+      Write-Host "uploaded $count file(s)"
+    } catch {
+      Write-UploaderLog "once failed: $($_.Exception.Message)"
+      throw
+    }
+  }
   "status" { Show-Status }
+  "logs" { Show-Logs }
   "start-hidden" { Start-HiddenUploader }
   "install-startup" { Install-Startup }
   "test-notification" { Invoke-TestNotification }
+  "doctor" { Invoke-Doctor }
 }
