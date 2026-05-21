@@ -611,10 +611,25 @@ function Start-RunLoop {
 }
 
 function Stop-ExistingUploaderProcesses {
+  $stopped = 0
+
+  foreach ($process in Get-UploaderRunProcesses) {
+    try {
+      Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop
+      $stopped += 1
+      Write-UploaderLog "stopped existing uploader process: pid=$($process.ProcessId)"
+    } catch {
+      Write-UploaderLog "failed to stop existing uploader process: pid=$($process.ProcessId) error=$($_.Exception.Message)"
+    }
+  }
+
+  return $stopped
+}
+
+function Get-UploaderRunProcesses {
   $script = [System.IO.Path]::GetFullPath($PSCommandPath)
   $escapedScript = [regex]::Escape($script)
   $currentPid = $PID
-  $stopped = 0
 
   try {
     $processes = Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe' OR Name = 'pwsh.exe'"
@@ -626,24 +641,11 @@ function Stop-ExistingUploaderProcesses {
     if ($process.ProcessId -eq $currentPid -or -not $process.CommandLine) {
       continue
     }
-
     $commandLine = [string]$process.CommandLine
-    $isSameScript = $commandLine -match $escapedScript
-    $isRunMode = $commandLine -match '(^|\s|")run("|\s|$)'
-    if (-not ($isSameScript -and $isRunMode)) {
-      continue
-    }
-
-    try {
-      Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop
-      $stopped += 1
-      Write-UploaderLog "stopped existing uploader process: pid=$($process.ProcessId)"
-    } catch {
-      Write-UploaderLog "failed to stop existing uploader process: pid=$($process.ProcessId) error=$($_.Exception.Message)"
+    if ($commandLine -match $escapedScript -and $commandLine -match '(^|\s|")run("|\s|$)') {
+      $process
     }
   }
-
-  return $stopped
 }
 
 function Start-HiddenUploader {
@@ -708,6 +710,25 @@ function Show-Status {
   Write-Host "uploaded records: $count"
 }
 
+function Write-DoctorLine {
+  param(
+    [ValidateSet("ok", "warn", "fail")]
+    [string]$Level,
+    [string]$Message
+  )
+
+  Write-Host "$Level  $Message"
+}
+
+function Get-RecentProblemLogLines {
+  if (-not (Test-Path -LiteralPath $LogFile)) {
+    return @()
+  }
+  @(Get-Content -LiteralPath $LogFile -Tail 80 -Encoding UTF8 | Where-Object {
+    $_ -match "failed|error|timeout|denied|invalid|not found"
+  } | Select-Object -Last 8)
+}
+
 function Show-Logs {
   Write-Host "log: $LogFile"
   if (-not (Test-Path -LiteralPath $LogFile)) {
@@ -716,6 +737,93 @@ function Show-Logs {
   }
 
   Get-Content -LiteralPath $LogFile -Tail $TailLines -Encoding UTF8
+}
+
+function Invoke-Doctor {
+  Update-ConfigFromParameters
+  Write-Host "Photo Monitor Uploader doctor"
+  Write-Host "config: $ConfigFile"
+  Write-Host "log: $LogFile"
+
+  $config = Read-JsonFile $ConfigFile $null
+  if (-not $config) {
+    Write-DoctorLine "fail" "not logged in; run login first"
+  } else {
+    Write-DoctorLine "ok" "config file exists"
+
+    foreach ($field in @("server", "token", "username", "department", "watch_dir")) {
+      if (Get-ConfigValue $config $field "") {
+        Write-DoctorLine "ok" "config field present: $field"
+      } else {
+        Write-DoctorLine "fail" "config field missing: $field"
+      }
+    }
+
+    $serverUrl = $null
+    $server = Get-ConfigValue $config "server" ""
+    if ($server) {
+      try {
+        $serverUrl = Normalize-Server ([string]$server)
+        Write-DoctorLine "ok" "server URL valid: $serverUrl"
+      } catch {
+        Write-DoctorLine "fail" "server URL invalid: $($_.Exception.Message)"
+      }
+    }
+
+    $watchDir = Get-ConfigValue $config "watch_dir" ""
+    if ($watchDir) {
+      if (Test-Path -LiteralPath $watchDir) {
+        Write-DoctorLine "ok" "watch directory exists: $watchDir"
+      } else {
+        Write-DoctorLine "fail" "watch directory not found: $watchDir"
+      }
+    }
+
+    $token = Get-ConfigValue $config "token" ""
+    if ($token) {
+      if ($serverUrl) {
+        try {
+          $headers = @{ Authorization = "Bearer $token" }
+          $result = Invoke-RestMethod -Uri "$serverUrl/auth/me" -Method Get -Headers $headers -TimeoutSec ([int](Get-ConfigValue $config "timeout_seconds" $TimeoutSeconds))
+          if ($result.authenticated) {
+            Write-DoctorLine "ok" "login token accepted by server"
+          } else {
+            Write-DoctorLine "fail" "login token rejected by server"
+          }
+        } catch {
+          Write-DoctorLine "fail" "login token check failed: $($_.Exception.Message)"
+        }
+      } else {
+        Write-DoctorLine "warn" "login token check skipped because server URL is invalid or missing"
+      }
+    }
+
+    Write-DoctorLine "ok" "interval_seconds=$(Get-ConfigValue $config "interval_seconds" $IntervalSeconds)"
+    Write-DoctorLine "ok" "stable_seconds=$(Get-ConfigValue $config "stable_seconds" $StableSeconds)"
+    Write-DoctorLine "ok" "timeout_seconds=$(Get-ConfigValue $config "timeout_seconds" $TimeoutSeconds)"
+    Write-DoctorLine "ok" "retry_count=$(Get-ConfigValue $config "retry_count" $RetryCount)"
+    Write-DoctorLine "ok" "retry_delay_seconds=$(Get-ConfigValue $config "retry_delay_seconds" $RetryDelaySeconds)"
+    Write-DoctorLine "ok" "include_subdirectories=$(Get-ConfigValue $config "include_subdirectories" $true)"
+  }
+
+  if (Test-Path -LiteralPath $LogFile) {
+    Write-DoctorLine "ok" "log file exists"
+  } else {
+    Write-DoctorLine "warn" "log file does not exist yet"
+  }
+
+  $processes = @(Get-UploaderRunProcesses)
+  Write-DoctorLine "ok" "background uploader process count: $($processes.Count)"
+
+  $problemLines = @(Get-RecentProblemLogLines)
+  if ($problemLines.Count -gt 0) {
+    Write-DoctorLine "warn" "recent problem log lines:"
+    foreach ($line in $problemLines) {
+      Write-Host "  $line"
+    }
+  } else {
+    Write-DoctorLine "ok" "no recent problem log lines"
+  }
 }
 
 function Invoke-TestNotification {
@@ -740,5 +848,5 @@ switch ($Command) {
   "start-hidden" { Start-HiddenUploader }
   "install-startup" { Install-Startup }
   "test-notification" { Invoke-TestNotification }
-  "doctor" { Show-Status }
+  "doctor" { Invoke-Doctor }
 }
