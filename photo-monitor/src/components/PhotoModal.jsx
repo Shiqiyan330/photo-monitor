@@ -1,3 +1,4 @@
+import { useEffect } from "react"
 import { getAssetUrl } from "../api"
 
 function formatPhotoTime(photo) {
@@ -9,20 +10,37 @@ function formatPhotoTime(photo) {
 }
 
 export default function PhotoModal({ photo, onClose }) {
+  useEffect(() => {
+    if (!photo) {
+      return undefined
+    }
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        onClose()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [photo, onClose])
+
   if (!photo) return null
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" onClick={(event) => event.stopPropagation()}>
+      <div
+        className="modal-card modal-card-enter"
+        role="dialog"
+        aria-modal="true"
+        aria-label="照片预览"
+        onClick={(event) => event.stopPropagation()}
+      >
         <button type="button" className="modal-close" onClick={onClose}>
           关闭
         </button>
 
-        <img
-          src={getAssetUrl(photo.url)}
-          alt={photo.name}
-          className="modal-image"
-        />
+        <img src={getAssetUrl(photo.url)} alt={photo.name} className="modal-image" />
 
         <div className="modal-caption">
           <div>{photo.name}</div>

@@ -1,6 +1,6 @@
 ﻿param(
   [Parameter(Position = 0)]
-  [ValidateSet("login", "run", "once", "status", "start-hidden", "install-startup", "test-notification")]
+  [ValidateSet("login", "run", "once", "status", "logs", "start-hidden", "install-startup", "test-notification")]
   [string]$Command = "status",
 
   [string]$Server = "http://121.43.132.227",
@@ -12,6 +12,7 @@
   [int]$IntervalSeconds = 60,
   [int]$StableSeconds = 10,
   [int]$TimeoutSeconds = 120,
+  [int]$TailLines = 80,
   [switch]$NoSubdirectories,
   [switch]$DryRun
 )
@@ -59,13 +60,16 @@ $LogFile = Join-Path $AppDir "uploader.log"
 
 function Write-UploaderLog {
   param([string]$Message)
-  if ((Test-Path -LiteralPath $LogFile) -and (Get-Item -LiteralPath $LogFile).Length -gt $MaxLogBytes) {
-    $archive = "$LogFile.$(Get-Date -Format 'yyyyMMddHHmmss').old"
-    Move-Item -LiteralPath $LogFile -Destination $archive -Force
-  }
-
   $line = "$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') $Message"
-  Add-Content -LiteralPath $LogFile -Value $line -Encoding UTF8
+  try {
+    if ((Test-Path -LiteralPath $LogFile) -and (Get-Item -LiteralPath $LogFile).Length -gt $MaxLogBytes) {
+      $archive = "$LogFile.$(Get-Date -Format 'yyyyMMddHHmmss').old"
+      Move-Item -LiteralPath $LogFile -Destination $archive -Force
+    }
+    Add-Content -LiteralPath $LogFile -Value $line -Encoding UTF8
+  } catch {
+    Write-Host "log write failed: $($_.Exception.Message)"
+  }
   if ($Host.Name -ne "Default Host") {
     Write-Host $line
   }
@@ -385,8 +389,17 @@ function Invoke-ScanOnce {
 
   $extensions = $PhotoExtensions
   $uploaded = 0
-  $files = @(Get-WatchedFiles $config $extensions)
-  Write-UploaderLog "scan started: files=$($files.Count) include_subdirectories=$(Get-ConfigValue $config "include_subdirectories" $true) watch_dir=$($config.watch_dir)"
+  $includeSubdirectories = [bool](Get-ConfigValue $config "include_subdirectories" $true)
+  Write-UploaderLog "scan starting: include_subdirectories=$includeSubdirectories watch_dir=$($config.watch_dir)"
+  $scanStartedAt = Get-Date
+  try {
+    $files = @(Get-WatchedFiles $config $extensions)
+  } catch {
+    Write-UploaderLog "scan enumerate failed: watch_dir=$($config.watch_dir) error=$($_.Exception.Message)"
+    throw
+  }
+  $scanElapsedMs = [int](((Get-Date) - $scanStartedAt).TotalMilliseconds)
+  Write-UploaderLog "scan started: files=$($files.Count) elapsed_ms=$scanElapsedMs include_subdirectories=$includeSubdirectories watch_dir=$($config.watch_dir)"
 
   foreach ($file in $files) {
     try {
@@ -541,6 +554,16 @@ function Show-Status {
   Write-Host "uploaded records: $count"
 }
 
+function Show-Logs {
+  Write-Host "log: $LogFile"
+  if (-not (Test-Path -LiteralPath $LogFile)) {
+    Write-Host "log file does not exist yet."
+    return
+  }
+
+  Get-Content -LiteralPath $LogFile -Tail $TailLines -Encoding UTF8
+}
+
 function Invoke-TestNotification {
   Show-UploaderNotification "照片上传测试" "如果你看到这条通知，说明通知通道可用。"
   Write-Host "Test notification requested. Check Windows notification center."
@@ -549,8 +572,17 @@ function Invoke-TestNotification {
 switch ($Command) {
   "login" { Invoke-Login }
   "run" { Start-RunLoop }
-  "once" { $count = Invoke-ScanOnce; Write-Host "uploaded $count file(s)" }
+  "once" {
+    try {
+      $count = Invoke-ScanOnce
+      Write-Host "uploaded $count file(s)"
+    } catch {
+      Write-UploaderLog "once failed: $($_.Exception.Message)"
+      throw
+    }
+  }
   "status" { Show-Status }
+  "logs" { Show-Logs }
   "start-hidden" { Start-HiddenUploader }
   "install-startup" { Install-Startup }
   "test-notification" { Invoke-TestNotification }

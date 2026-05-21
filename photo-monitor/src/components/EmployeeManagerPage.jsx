@@ -82,11 +82,15 @@ export default function EmployeeManagerPage({
     )
   }, [departments, employees, form.department])
 
-  const departmentPermissionOptions = departmentOptions.map((item) => ({
-    value: buildDepartmentPermission(item),
-    label: item,
-  }))
-  const matrixDepartmentOptions = ["*", ...departmentOptions]
+  const departmentPermissionOptions = useMemo(
+    () =>
+      departmentOptions.map((item) => ({
+        value: buildDepartmentPermission(item),
+        label: item,
+      })),
+    [departmentOptions],
+  )
+  const matrixDepartmentOptions = useMemo(() => ["*", ...departmentOptions], [departmentOptions])
 
   const groupedEmployees = useMemo(() => {
     const groups = new Map()
@@ -231,136 +235,137 @@ export default function EmployeeManagerPage({
           </div>
 
           <form className="stack-form" onSubmit={handleSubmit}>
-              <label className="field">
-                <span>用户名</span>
-                <input
-                  value={form.username}
-                  onChange={(event) => handleChange("username", event.target.value)}
-                  placeholder="默认可直接填手机号"
-                  required
-                />
-              </label>
+            <label className="field">
+              <span>用户名</span>
+              <input
+                value={form.username}
+                onChange={(event) => handleChange("username", event.target.value)}
+                placeholder="默认可直接填写手机号"
+                required
+              />
+            </label>
 
-              <label className="field">
-                <span>密码</span>
-                <input
-                  type="text"
-                  value={form.password}
-                  onChange={(event) => handleChange("password", event.target.value)}
-                  placeholder={editingUsername ? "留空表示不修改密码" : "不填写则默认与手机号相同"}
-                />
-              </label>
+            <label className="field">
+              <span>密码</span>
+              <input
+                type="text"
+                value={form.password}
+                onChange={(event) => handleChange("password", event.target.value)}
+                placeholder={editingUsername ? "留空表示不修改密码" : "不填写则默认与手机号相同"}
+              />
+            </label>
 
-              <label className="field">
-                <span>手机号</span>
-                <input value={form.phone} onChange={(event) => handleChange("phone", event.target.value)} />
-              </label>
+            <label className="field">
+              <span>手机号</span>
+              <input value={form.phone} onChange={(event) => handleChange("phone", event.target.value)} />
+            </label>
 
-              <label className="field">
-                <span>姓名</span>
-                <input value={form.name} onChange={(event) => handleChange("name", event.target.value)} />
-              </label>
+            <label className="field">
+              <span>姓名</span>
+              <input value={form.name} onChange={(event) => handleChange("name", event.target.value)} />
+            </label>
 
-              <label className="field">
-                <span>部门</span>
-                <input
-                  list="department-options"
-                  value={form.department}
-                  onChange={(event) => handleChange("department", event.target.value)}
-                />
-              </label>
+            <label className="field">
+              <span>部门</span>
+              <input
+                list="department-options"
+                value={form.department}
+                onChange={(event) => handleChange("department", event.target.value)}
+              />
+            </label>
 
-              <label className="field">
-                <span>职位</span>
-                <input value={form.position} onChange={(event) => handleChange("position", event.target.value)} />
-              </label>
+            <label className="field">
+              <span>职位</span>
+              <input value={form.position} onChange={(event) => handleChange("position", event.target.value)} />
+            </label>
 
-              <label className="field">
-                <span>职级</span>
-                <input value={form.rank} onChange={(event) => handleChange("rank", event.target.value)} />
-              </label>
+            <label className="field">
+              <span>职级</span>
+              <input value={form.rank} onChange={(event) => handleChange("rank", event.target.value)} />
+            </label>
 
-              <div className="field">
-                <span>权限</span>
+            <div className="field">
+              <span>权限</span>
 
-                <div className="permission-sections">
-                  <section className="permission-section">
-                    <div className="permission-section-head">
-                      <div>
-                        <div className="permission-title">系统-部门-增删改查权限</div>
-                        <p className="field-hint">按“某人-某系统-某部门-增删改查”授权。* 表示全部部门。</p>
-                      </div>
+              <div className="permission-sections">
+                <section className="permission-section">
+                  <div className="permission-section-head">
+                    <div>
+                      <div className="permission-title">系统-部门-增删改查权限</div>
+                      <p className="field-hint">
+                        按“某人、某系统、某部门、增删改查”授权，* 表示全部部门。
+                      </p>
                     </div>
+                  </div>
 
-                    <div className="permission-matrix">
-                      <div className="permission-matrix-head">
-                        <span>系统</span>
-                        <span>部门</span>
-                        {PERMISSION_ACTIONS.map((action) => (
-                          <span key={action.value}>{action.label}</span>
-                        ))}
-                      </div>
-                      {PERMISSION_SYSTEMS.flatMap((system) =>
-                        matrixDepartmentOptions.map((department) => (
-                          <div key={`${system.value}-${department}`} className="permission-matrix-row">
-                            <span>{system.label}</span>
-                            <span>{department === "*" ? "全部部门" : department}</span>
-                            {PERMISSION_ACTIONS.map((action) => {
-                              const permission = buildMatrixPermission(system.value, department, action.value)
-                              return (
-                                <label key={permission} className="matrix-check">
-                                  <input
-                                    type="checkbox"
-                                    checked={form.permissions.includes(permission)}
-                                    onChange={() => togglePermission(permission)}
-                                  />
-                                </label>
-                              )
-                            })}
-                          </div>
-                        )),
-                      )}
+                  <div className="permission-matrix">
+                    <div className="permission-matrix-head">
+                      <span>系统</span>
+                      <span>部门</span>
+                      {PERMISSION_ACTIONS.map((action) => (
+                        <span key={action.value}>{action.label}</span>
+                      ))}
                     </div>
-                  </section>
+                    {PERMISSION_SYSTEMS.flatMap((system) =>
+                      matrixDepartmentOptions.map((department) => (
+                        <div key={`${system.value}-${department}`} className="permission-matrix-row">
+                          <span>{system.label}</span>
+                          <span>{department === "*" ? "全部部门" : department}</span>
+                          {PERMISSION_ACTIONS.map((action) => {
+                            const permission = buildMatrixPermission(system.value, department, action.value)
+                            return (
+                              <label key={permission} className="matrix-check">
+                                <input
+                                  type="checkbox"
+                                  checked={form.permissions.includes(permission)}
+                                  onChange={() => togglePermission(permission)}
+                                />
+                              </label>
+                            )
+                          })}
+                        </div>
+                      )),
+                    )}
+                  </div>
+                </section>
 
-                  <section className="permission-section">
-                    <div className="permission-section-head">
-                      <div>
-                        <div className="permission-title">兼容功能权限</div>
-                        <p className="field-hint">用于兼容旧账号和页面入口控制。新权限请优先在上方矩阵配置。</p>
-                      </div>
+                <section className="permission-section">
+                  <div className="permission-section-head">
+                    <div>
+                      <div className="permission-title">兼容功能权限</div>
+                      <p className="field-hint">
+                        用于兼容旧账号和页面入口控制。新权限请优先在上方矩阵配置。
+                      </p>
                     </div>
+                  </div>
 
-                    <div className="permission-grid">
-                      {[...FEATURE_PERMISSION_OPTIONS, ...departmentPermissionOptions].map((item) => {
-                        const checked = form.permissions.includes(item.value)
-                        return (
-                          <label
-                            key={item.value}
-                            className={checked ? "permission-chip active" : "permission-chip"}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => togglePermission(item.value)}
-                            />
-                            <span>
-                              <strong>{item.label}</strong>
-                              {item.description ? <small>{item.description}</small> : null}
-                            </span>
-                          </label>
-                        )
-                      })}
-                    </div>
-                  </section>
-                </div>
+                  <div className="permission-grid">
+                    {[...FEATURE_PERMISSION_OPTIONS, ...departmentPermissionOptions].map((item) => {
+                      const checked = form.permissions.includes(item.value)
+                      return (
+                        <label key={item.value} className={checked ? "permission-chip active" : "permission-chip"}>
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => togglePermission(item.value)}
+                          />
+                          <span>
+                            <strong>{item.label}</strong>
+                            {item.description ? <small>{item.description}</small> : null}
+                          </span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                </section>
               </div>
+            </div>
 
-              {error ? <div className="form-error">{error}</div> : null}
+            {error ? <div className="form-error">{error}</div> : null}
 
-              <button type="submit" className="primary-button" disabled={saving}>
-                {saving ? "保存中..." : editingUsername ? "保存修改" : "新增员工"}
-              </button>
+            <button type="submit" className="primary-button" disabled={saving}>
+              {saving ? "保存中..." : editingUsername ? "保存修改" : "新增员工"}
+            </button>
           </form>
 
           <datalist id="department-options">
@@ -394,13 +399,15 @@ export default function EmployeeManagerPage({
                             <div className="employee-main">{employee.name || employee.username}</div>
                             <div className="employee-sub">
                               {employee.username}
-                              {employee.position ? ` · ${employee.position}` : ""}
-                              {employee.rank ? ` · ${employee.rank}` : ""}
+                              {employee.position ? ` / ${employee.position}` : ""}
+                              {employee.rank ? ` / ${employee.rank}` : ""}
                             </div>
                             <div className="employee-tags">
                               <span className="employee-tag">{(employee.permissions ?? []).length} 项权限</span>
                               {departmentPermissions.length ? (
-                                <span className="employee-tag accent">{departmentPermissions.length} 个部门权限</span>
+                                <span className="employee-tag accent">
+                                  {departmentPermissions.length} 个部门权限
+                                </span>
                               ) : null}
                             </div>
                           </div>

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { memo, useEffect, useRef } from "react"
 import { getAssetUrl } from "../api"
 
 function formatPhotoTime(photo) {
@@ -9,10 +9,9 @@ function formatPhotoTime(photo) {
   return value ? new Date(value * 1000).toLocaleString() : ""
 }
 
-export default function PhotoGrid({
+function PhotoGrid({
   photos,
   loading,
-  station,
   displayCount,
   totalCount,
   originalCount,
@@ -42,7 +41,17 @@ export default function PhotoGrid({
   }, [hasMore, loading, onLoadMore])
 
   if (loading && photos.length === 0) {
-    return <div className="status-card">正在加载 {station} 的照片...</div>
+    return (
+      <div className="photo-grid" aria-label="照片加载中">
+        {Array.from({ length: 8 }).map((_, index) => (
+          <div key={index} className="photo-card photo-card-skeleton">
+            <div className="photo-thumb-skeleton" />
+            <div className="skeleton-line wide" />
+            <div className="skeleton-line" />
+          </div>
+        ))}
+      </div>
+    )
   }
 
   if (!loading && photos.length === 0) {
@@ -58,19 +67,25 @@ export default function PhotoGrid({
 
       <div className="photo-grid">
         {photos.map((photo, index) => (
-          <article key={`${photo.url}-${index}`} className="photo-card">
-            <img
-              src={getAssetUrl(photo.thumbnail_url ?? photo.url)}
-              alt={photo.name}
-              className="photo-thumb"
-              loading="lazy"
-              decoding="async"
+          <article key={photo.id ?? `${photo.url}-${index}`} className="photo-card">
+            <button
+              type="button"
+              className="photo-thumb-button"
               onClick={() => onClickPhoto(photo)}
-            /> 
+              aria-label={`查看照片：${photo.name}`}
+            >
+              <img
+                src={getAssetUrl(photo.thumbnail_url ?? photo.url)}
+                alt={photo.name}
+                className="photo-thumb"
+                loading="lazy"
+                decoding="async"
+              />
+            </button>
 
             <div className="photo-meta">
               <span>{formatPhotoTime(photo)}</span>
-              <span>{(photo.size / 1024).toFixed(1)} KB</span>
+              <span>{photo.size ? `${(photo.size / 1024).toFixed(1)} KB` : "未知大小"}</span>
             </div>
 
             <div className="photo-name" title={photo.name}>
@@ -92,3 +107,5 @@ export default function PhotoGrid({
     </>
   )
 }
+
+export default memo(PhotoGrid)

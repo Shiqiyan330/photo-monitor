@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef, useState } from "react"
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   changePassword,
   createEmployee,
@@ -7,7 +7,6 @@ import {
   deleteLedger,
   deleteStudyArticle,
   downloadFile,
-  getAuthorizedUrl,
   getAssetUrl,
   fetchLedgers,
   fetchCurrentUser,
@@ -347,8 +346,10 @@ function UploadPanel({ title, description, departmentOptions, onSubmit, submitti
 
   useEffect(() => {
     if (!department && departmentOptions.length) {
-      setDepartment(departmentOptions[0])
+      const timer = window.setTimeout(() => setDepartment(departmentOptions[0]), 0)
+      return () => window.clearTimeout(timer)
     }
+    return undefined
   }, [department, departmentOptions])
 
   const selectFile = (files) => {
@@ -508,7 +509,8 @@ function DocumentsPage({ onBack, user, departments, showBanner }) {
   }
 
   useEffect(() => {
-    loadFiles()
+    const timer = window.setTimeout(loadFiles, 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
   const handleUpload = async (payload, options) => {
@@ -601,7 +603,8 @@ function LearningPage({ onBack, user, departments, showBanner }) {
   }
 
   useEffect(() => {
-    loadArticles()
+    const timer = window.setTimeout(loadArticles, 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
   const handleUpload = async (payload, options) => {
@@ -694,7 +697,8 @@ function LedgerWorkspacePage({ onBack, user, departments, showBanner }) {
   }
 
   useEffect(() => {
-    loadLists()
+    const timer = window.setTimeout(loadLists, 0)
+    return () => window.clearTimeout(timer)
   }, [])
 
   const handleLedgerUpload = async (payload, options) => {
@@ -859,34 +863,40 @@ function App() {
   const wsRef = useRef(null)
   const bannerTimerRef = useRef(0)
 
-  const hasPhotoAccess = hasCameraPermission(user)
+  const hasPhotoAccess = useMemo(() => hasCameraPermission(user), [user])
   const parsedPhotoLimit = parsePositiveInteger(photoLimit)
   const parsedDedupeWindow =
     parsePositiveInteger(dedupeWindowSeconds) ??
     parsePositiveInteger(DEFAULT_DEDUPE_WINDOW_SECONDS)
-  const filteredPhotos = dedupeEnabled ? dedupePhotosByWindow(photos, parsedDedupeWindow) : photos
-  const limitedPhotos = parsedPhotoLimit ? filteredPhotos.slice(0, parsedPhotoLimit) : filteredPhotos
+  const filteredPhotos = useMemo(
+    () => (dedupeEnabled ? dedupePhotosByWindow(photos, parsedDedupeWindow) : photos),
+    [dedupeEnabled, parsedDedupeWindow, photos],
+  )
+  const limitedPhotos = useMemo(
+    () => (parsedPhotoLimit ? filteredPhotos.slice(0, parsedPhotoLimit) : filteredPhotos),
+    [filteredPhotos, parsedPhotoLimit],
+  )
   const displayedPhotos = limitedPhotos
   const hasMorePhotos = photoCursor != null && (!parsedPhotoLimit || photos.length < parsedPhotoLimit)
-  const accessibleModules = MODULES.filter((module) => hasModuleAccess(user, module))
-  const photoDepartmentOptions = getDepartmentViewOptions(user, departments)
+  const accessibleModules = useMemo(() => MODULES.filter((module) => hasModuleAccess(user, module)), [user])
+  const photoDepartmentOptions = useMemo(() => getDepartmentViewOptions(user, departments), [departments, user])
 
-  const getNextPhotoPageSize = () => {
+  const getNextPhotoPageSize = useCallback(() => {
     const batchSize = getPhotoFeedBatchSize()
     if (!parsedPhotoLimit) {
       return batchSize
     }
 
     return Math.max(Math.min(batchSize, parsedPhotoLimit - photos.length), 0)
-  }
+  }, [parsedPhotoLimit, photos.length])
 
-  const showBanner = (message) => {
+  const showBanner = useCallback((message) => {
     setBannerMessage(message)
     window.clearTimeout(bannerTimerRef.current)
     bannerTimerRef.current = window.setTimeout(() => setBannerMessage(""), 2400)
-  }
+  }, [])
 
-  const loadCurrentUser = async () => {
+  const loadCurrentUser = useCallback(async () => {
     if (!getStoredToken()) {
       setBooting(false)
       setUser(null)
@@ -906,9 +916,9 @@ function App() {
     } finally {
       setBooting(false)
     }
-  }
+  }, [])
 
-  const loadPhotos = async (nextStation = station) => {
+  const loadPhotos = useCallback(async (nextStation = station) => {
     if (!hasPhotoAccess) {
       setPhotos([])
       setPhotoCursor(null)
@@ -947,9 +957,9 @@ function App() {
     } finally {
       setLoadingPhotos(false)
     }
-  }
+  }, [endTime, hasPhotoAccess, parsedPhotoLimit, selectedDepartment, startTime, station])
 
-  const loadMorePhotos = async () => {
+  const loadMorePhotos = useCallback(async () => {
     if (!hasMorePhotos || loadingPhotos || loadingMorePhotos) {
       return
     }
@@ -981,17 +991,29 @@ function App() {
     } finally {
       setLoadingMorePhotos(false)
     }
-  }
+  }, [
+    endTime,
+    getNextPhotoPageSize,
+    hasMorePhotos,
+    loadingMorePhotos,
+    loadingPhotos,
+    photoCursor,
+    photoTotal,
+    selectedDepartment,
+    startTime,
+    station,
+  ])
 
-  const loadEmployees = async () => {
+  const loadEmployees = useCallback(async () => {
     const data = await fetchEmployees()
     setEmployees(data.employees)
     setDepartments(data.departments)
-  }
+  }, [])
 
   useEffect(() => {
-    loadCurrentUser()
-  }, [])
+    const timer = window.setTimeout(loadCurrentUser, 0)
+    return () => window.clearTimeout(timer)
+  }, [loadCurrentUser])
 
   useEffect(() => {
     const handleHashChange = () => setCurrentPage(readCurrentPage())
@@ -1013,16 +1035,18 @@ function App() {
 
   useEffect(() => {
     if (!user) {
-      setPhotos([])
-      setPhotoCursor(null)
-      setPhotoTotal(0)
-      setEmployees([])
-      setDepartments([])
-      setStartTime("")
-      setEndTime("")
-      setSelectedDepartment("")
-      setSelectedPhoto(null)
-      return
+      const timer = window.setTimeout(() => {
+        setPhotos([])
+        setPhotoCursor(null)
+        setPhotoTotal(0)
+        setEmployees([])
+        setDepartments([])
+        setStartTime("")
+        setEndTime("")
+        setSelectedDepartment("")
+        setSelectedPhoto(null)
+      }, 0)
+      return () => window.clearTimeout(timer)
     }
 
     if (currentPage !== PAGE_MONITOR) {
@@ -1030,29 +1054,35 @@ function App() {
     }
 
     if (!hasPhotoAccess) {
-      setPhotos([])
-      setPhotoCursor(null)
-      setPhotoTotal(0)
-      setPhotoError("")
-      setSelectedPhoto(null)
-      return
+      const timer = window.setTimeout(() => {
+        setPhotos([])
+        setPhotoCursor(null)
+        setPhotoTotal(0)
+        setPhotoError("")
+        setSelectedPhoto(null)
+      }, 0)
+      return () => window.clearTimeout(timer)
     }
 
-    loadPhotos()
-  }, [station, selectedDepartment, startTime, endTime, user, hasPhotoAccess, currentPage])
+    const timer = window.setTimeout(loadPhotos, 0)
+    return () => window.clearTimeout(timer)
+  }, [currentPage, hasPhotoAccess, loadPhotos, user])
 
   useEffect(() => {
     if (!user || user.role !== "admin") {
-      setEmployees([])
-      setDepartments([])
-      if (currentPage === PAGE_EMPLOYEES) {
-        setRoute(PAGE_DASHBOARD)
-      }
-      return
+      const timer = window.setTimeout(() => {
+        setEmployees([])
+        setDepartments([])
+        if (currentPage === PAGE_EMPLOYEES) {
+          setRoute(PAGE_DASHBOARD)
+        }
+      }, 0)
+      return () => window.clearTimeout(timer)
     }
 
-    loadEmployees()
-  }, [user, currentPage])
+    const timer = window.setTimeout(loadEmployees, 0)
+    return () => window.clearTimeout(timer)
+  }, [currentPage, loadEmployees, user])
 
   useEffect(() => {
     if (!user || currentPage === PAGE_DASHBOARD || currentPage === PAGE_EMPLOYEES) {
@@ -1100,7 +1130,7 @@ function App() {
         wsRef.current = null
       }
     }
-  }, [user, station, hasPhotoAccess, currentPage])
+  }, [currentPage, hasPhotoAccess, loadPhotos, user])
 
   useEffect(() => {
     return () => window.clearTimeout(bannerTimerRef.current)
@@ -1164,11 +1194,6 @@ function App() {
   const openEmployeePage = () => {
     setCurrentPage(PAGE_EMPLOYEES)
     setRoute(PAGE_EMPLOYEES)
-  }
-
-  const openMonitorPage = () => {
-    setCurrentPage(PAGE_MONITOR)
-    setRoute(PAGE_MONITOR)
   }
 
   const openDashboardPage = () => {

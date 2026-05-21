@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 export default function ChangePasswordModal({ onClose, onSubmit }) {
   const [oldPassword, setOldPassword] = useState("")
@@ -6,6 +6,20 @@ export default function ChangePasswordModal({ onClose, onSubmit }) {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
   const [submitting, setSubmitting] = useState(false)
+  const oldPasswordRef = useRef(null)
+
+  useEffect(() => {
+    oldPasswordRef.current?.focus()
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        onClose()
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
+  }, [onClose])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -30,7 +44,13 @@ export default function ChangePasswordModal({ onClose, onSubmit }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card side-modal" onClick={(event) => event.stopPropagation()}>
+      <div
+        className="modal-card side-modal modal-card-enter"
+        role="dialog"
+        aria-modal="true"
+        aria-label="修改密码"
+        onClick={(event) => event.stopPropagation()}
+      >
         <div className="modal-header">
           <h2>修改密码</h2>
           <button type="button" className="modal-close" onClick={onClose}>
@@ -42,6 +62,7 @@ export default function ChangePasswordModal({ onClose, onSubmit }) {
           <label className="field">
             <span>原密码</span>
             <input
+              ref={oldPasswordRef}
               type="password"
               value={oldPassword}
               onChange={(event) => setOldPassword(event.target.value)}

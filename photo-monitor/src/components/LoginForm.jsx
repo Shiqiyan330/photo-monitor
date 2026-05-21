@@ -35,7 +35,7 @@ export default function LoginForm({ onSubmit, serverMessage }) {
         <p className="eyebrow">Employee Login</p>
         <h1 className="login-title">员工登录系统</h1>
         <p className="hero-copy">
-          账号数据现在保存在当前项目的 <code>photo-backend/users.json</code> 中，员工可以继续使用已有账号登录。
+          账号数据保存在当前项目的 <code>photo-backend/users.json</code> 中，员工可以继续使用已有账号登录。
         </p>
       </div>
 

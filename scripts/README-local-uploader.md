@@ -1,4 +1,4 @@
-﻿# 照片自动上传脚本使用教程
+# 照片自动上传脚本使用教程
 
 本文档说明如何使用 `photo-monitor-uploader.ps1` 在 Windows 上监控本地目录，并自动把新增照片上传到服务器。
 
@@ -118,19 +118,19 @@ xxx.jpg 已上传到 shangzhan
 
 ## 八、常用参数
 
-| 参数 | 说明 | 默认值 |
-| --- | --- | --- |
-| `-Server` | 后端服务器地址 | `http://121.43.132.227` |
-| `-Username` | 登录用户名 | `<用户名>` |
-| `-Password` | 登录密码 | `<密码>` |
-| `-Department` | 上传部门 | 登录用户部门或手动输入 |
-| `-Station` | 默认站点，路径中没有 `xiazhan` / `shangzhan` 时使用 | `uploads` |
-| `-WatchDir` | 本地监控目录 | 脚本默认目录 |
-| `-IntervalSeconds` | 持续监控扫描间隔 | `60` |
-| `-StableSeconds` | 文件稳定等待时间 | `10` |
-| `-TimeoutSeconds` | 请求超时时间 | `120` |
-| `-NoSubdirectories` | 不扫描子目录 | 默认扫描子目录 |
-| `-DryRun` | 只检测，不上传 | 默认关闭 |
+| 参数                  | 说明                                                    | 默认值                    |
+| --------------------- | ------------------------------------------------------- | ------------------------- |
+| `-Server`           | 后端服务器地址                                          | `http://121.43.132.227` |
+| `-Username`         | 登录用户名                                              | `<用户名>`              |
+| `-Password`         | 登录密码                                                | `<密码>`                |
+| `-Department`       | 上传部门                                                | 登录用户部门或手动输入    |
+| `-Station`          | 默认站点，路径中没有 `xiazhan` / `shangzhan` 时使用 | `uploads`               |
+| `-WatchDir`         | 本地监控目录                                            | 脚本默认目录              |
+| `-IntervalSeconds`  | 持续监控扫描间隔                                        | `60`                    |
+| `-StableSeconds`    | 文件稳定等待时间                                        | `10`                    |
+| `-TimeoutSeconds`   | 请求超时时间                                            | `120`                   |
+| `-NoSubdirectories` | 不扫描子目录                                            | 默认扫描子目录            |
+| `-DryRun`           | 只检测，不上传                                          | 默认关闭                  |
 
 ## 九、照片上传说明
 
@@ -179,13 +179,27 @@ shangzhan
 
 其中：
 
-| 文件 | 说明 |
-| --- | --- |
-| `config.json` | 登录配置、token、监控目录 |
-| `uploaded_state.json` | 已上传文件状态 |
-| `uploader.log` | 运行日志 |
+| 文件                    | 说明                      |
+| ----------------------- | ------------------------- |
+| `config.json`         | 登录配置、token、监控目录 |
+| `uploaded_state.json` | 已上传文件状态            |
+| `uploader.log`        | 运行日志                  |
 
 ## 十二、查看日志
+
+脚本内置查看最近日志：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\photo-monitor-uploader.ps1 logs
+```
+
+自定义显示行数：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File scripts\photo-monitor-uploader.ps1 logs -TailLines 120
+```
+
+也可以直接读取日志文件：
 
 ```powershell
 Get-Content "$env:LOCALAPPDATA\PhotoMonitorUploader\uploader.log" -Tail 80
