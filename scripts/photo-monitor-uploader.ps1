@@ -87,7 +87,19 @@ function Write-UploaderLog {
 function Format-ExceptionMessage {
   param($ErrorRecord)
 
+  if ($null -eq $ErrorRecord) {
+    return ""
+  }
+
   $exception = $ErrorRecord.Exception
+  if (-not $exception) {
+    if ($ErrorRecord -is [System.Exception]) {
+      $exception = $ErrorRecord
+    } else {
+      return [string]$ErrorRecord
+    }
+  }
+
   if ($exception.InnerException) {
     return "$($exception.Message) inner=$($exception.InnerException.Message)"
   }
@@ -229,9 +241,32 @@ function Assert-LoginConfig {
     throw $message
   }
 
+  $changed = $false
+  $serverUrl = Normalize-Server ([string]$config.server)
+  if ([string]$config.server -ne $serverUrl) {
+    $config.server = $serverUrl
+    $changed = $true
+  }
+
+  $department = Assert-SafePathPart "Department" ([string]$config.department)
+  if ([string]$config.department -ne $department) {
+    $config.department = $department
+    $changed = $true
+  }
+
+  $station = Assert-SafePathPart "Station" ([string](Get-ConfigValue $config "station" "uploads"))
+  if (-not $config.PSObject.Properties["station"] -or [string]$config.station -ne $station) {
+    $config.station = $station
+    $changed = $true
+  }
+
+  if ($changed) {
+    Save-JsonFile $ConfigFile $config
+    Write-UploaderLog "login config normalized: server=$($config.server) department=$($config.department) station=$($config.station)"
+  }
+
   try {
     $headers = @{ Authorization = "Bearer $($config.token)" }
-    $serverUrl = Normalize-Server ([string]$config.server)
     $result = Invoke-RestMethod -Uri "$serverUrl/auth/me" -Method Get -Headers $headers -TimeoutSec ([int](Get-ConfigValue $config "timeout_seconds" $TimeoutSeconds))
     if (-not $result.authenticated) {
       throw "server returned unauthenticated response"
