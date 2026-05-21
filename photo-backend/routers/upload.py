@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query
 from fastapi.responses import FileResponse
 
 from routers.deps import require_file_access, require_file_edit_access, require_ledger_access, require_ledger_upload_access, require_study_access, require_study_edit_access, require_upload_access
-from services.auth_service import employee_system
+from services.auth_service import employee_system, user_has_any_matrix_permission
 from services.upload_service import (
     delete_data_upload,
     get_data_upload,
@@ -34,11 +34,8 @@ def _user_from_token(token: str | None) -> dict | None:
     return user.to_public_dict() if user else None
 
 
-def _require_permission(user: dict, permissions: set[str], detail: str) -> dict:
-    if user["role"] == "admin":
-        return user
-    user_permissions = set(user.get("permissions") or [])
-    if not user_permissions.intersection(permissions):
+def _require_matrix_read_permission(user: dict, system: str, detail: str) -> dict:
+    if user["role"] != "admin" and not user_has_any_matrix_permission(user, system, {"read"}):
         raise HTTPException(status_code=403, detail=detail)
     return user
 
@@ -50,7 +47,7 @@ def get_file_view_user(
     user = _user_from_token(token) or _user_from_token(_extract_bearer_token(authorization))
     if not user:
         raise HTTPException(status_code=401, detail="请先登录")
-    return _require_permission(user, {"company_files_view"}, "No permission to access files")
+    return _require_matrix_read_permission(user, "company_files", "No permission to access files")
 
 
 def get_study_view_user(
@@ -60,7 +57,7 @@ def get_study_view_user(
     user = _user_from_token(token) or _user_from_token(_extract_bearer_token(authorization))
     if not user:
         raise HTTPException(status_code=401, detail="请先登录")
-    return _require_permission(user, {"study_view", "study_edit"}, "No permission to access study articles")
+    return _require_matrix_read_permission(user, "study_articles", "No permission to access study articles")
 
 
 def get_ledger_view_user(
@@ -70,7 +67,7 @@ def get_ledger_view_user(
     user = _user_from_token(token) or _user_from_token(_extract_bearer_token(authorization))
     if not user:
         raise HTTPException(status_code=401, detail="请先登录")
-    return _require_permission(user, {"ledger_view"}, "No permission to access ledgers")
+    return _require_matrix_read_permission(user, "ledgers", "No permission to access ledgers")
 
 
 def inline_file_response(target: Path, item: dict) -> FileResponse:

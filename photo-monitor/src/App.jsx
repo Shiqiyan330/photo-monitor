@@ -54,7 +54,6 @@ const PAGE_STRUCTURE = "structure"
 const MODULES = [
   {
     key: PAGE_MONITOR,
-    permission: "camera",
     matrixSystem: "photos",
     title: "监控拍照",
     description: "实时监控与拍照记录",
@@ -63,7 +62,6 @@ const MODULES = [
   },
   {
     key: PAGE_DOCUMENTS,
-    permission: "company_files_view",
     matrixSystem: "company_files",
     title: "公司文件",
     description: "公司文档资料库",
@@ -72,7 +70,6 @@ const MODULES = [
   },
   {
     key: PAGE_LEARNING,
-    permission: "study_view",
     matrixSystem: "study_articles",
     title: "学习交流",
     description: "在线学习与文档交流",
@@ -81,7 +78,6 @@ const MODULES = [
   },
   {
     key: PAGE_LEDGER,
-    permission: "ledger_view",
     matrixSystem: "ledgers",
     title: "台账管理",
     description: "工作台账上传与管理",
@@ -90,7 +86,7 @@ const MODULES = [
   },
   {
     key: PAGE_STRUCTURE,
-    permission: "structure",
+    matrixSystem: "structure",
     title: "公司架构",
     description: "组织架构与人员联系",
     accent: "purple",
@@ -171,61 +167,102 @@ function uniqueStrings(values) {
   return Array.from(new Set(values.map((item) => (item || "").trim()).filter(Boolean)))
 }
 
-function getDepartmentPermissions(user) {
-  if (!user) {
-    return []
+function parseMatrixPermission(permission) {
+  if (typeof permission !== "string" || !permission.startsWith("perm:")) {
+    return null
   }
-
-  if (Array.isArray(user.department_permissions)) {
-    return uniqueStrings(user.department_permissions)
+  const parts = permission.slice(5).split(":")
+  if (parts.length !== 3 || parts.some((item) => !item)) {
+    return null
   }
-
-  return uniqueStrings(
-    (user.permissions ?? [])
-      .filter((item) => item.startsWith("dept_"))
-      .map((item) => item.slice(5)),
-  )
+  return { system: parts[0], department: parts[1], action: parts[2] }
 }
 
-function getDepartmentViewOptions(user, departments) {
-  if (!user) {
-    return []
-  }
-
-  const departmentOptions =
-    user.role === "admin"
-      ? uniqueStrings(departments)
-      : uniqueStrings([...getDepartmentPermissions(user), user.department ?? ""])
-
-  return departmentOptions.length > 1 ? ["", ...departmentOptions] : departmentOptions
-}
-
-function hasCameraPermission(user) {
-  return Boolean(
-    user &&
-      (user.role === "admin" ||
-        user.permissions?.includes("camera") ||
-        user.permissions?.includes("camera_all_departments") ||
-        hasMatrixReadPermission(user, "photos")),
-  )
-}
-
-function hasMatrixReadPermission(user, system) {
+function hasMatrixPermission(user, system, action, department = "") {
   if (!user) {
     return false
   }
   if (user.role === "admin") {
     return true
   }
-  return (user.permissions ?? []).some((item) => item.startsWith(`perm:${system}:`) && item.endsWith(":read"))
+  const targetDepartment = department || "*"
+  return (user.permissions ?? []).some((permission) => {
+    const parsed = parseMatrixPermission(permission)
+    if (!parsed || parsed.system !== system || parsed.action !== action) {
+      return false
+    }
+    return parsed.department === "*" || parsed.department === targetDepartment
+  })
 }
 
-function hasPermission(user, permission) {
-  return Boolean(user && (user.role === "admin" || user.permissions?.includes(permission)))
+function hasAnyMatrixAction(user, system, actions) {
+  if (!user) {
+    return false
+  }
+  if (user.role === "admin") {
+    return true
+  }
+  return (user.permissions ?? []).some((permission) => {
+    const parsed = parseMatrixPermission(permission)
+    return parsed && parsed.system === system && actions.includes(parsed.action)
+  })
+}
+
+function getMatrixDepartments(user, system, action) {
+  if (!user) {
+    return []
+  }
+  if (user.role === "admin") {
+    return []
+  }
+  const departments = []
+  for (const permission of user.permissions ?? []) {
+    const parsed = parseMatrixPermission(permission)
+    if (!parsed) {
+      continue
+    }
+    if (system && parsed.system !== system) {
+      continue
+    }
+    if (action && parsed.action !== action) {
+      continue
+    }
+    departments.push(parsed.department)
+  }
+  if (departments.includes("*")) {
+    return []
+  }
+  return uniqueStrings(departments)
+}
+
+function getDepartmentViewOptions(user, departments, system = null, action = "read") {
+  if (!user) {
+    return []
+  }
+
+  if (user.role === "admin") {
+    return uniqueStrings(departments)
+  }
+
+  const matrixDepartments = getMatrixDepartments(user, system, action)
+  const departmentOptions = matrixDepartments.length
+    ? matrixDepartments
+    : uniqueStrings([...(departments ?? []), ...(user.department_permissions ?? []), user.department ?? ""])
+
+  return departmentOptions.length > 1 ? ["", ...departmentOptions] : departmentOptions
+}
+
+function hasCameraPermission(user) {
+  return hasMatrixReadPermission(user, "photos")
+}
+
+function hasMatrixReadPermission(user, system) {
+  return hasAnyMatrixAction(user, system, ["read"])
 }
 
 function hasModuleAccess(user, module) {
-  return hasPermission(user, module.permission) || hasMatrixReadPermission(user, module.matrixSystem)
+  const actions = module.key === PAGE_STRUCTURE ? ["read"] : ["read", "create", "update", "delete"]
+  return hasAnyMatrixAction(user, module.matrixSystem, actions)
 }
 
 function readCurrentPage() {
@@ -439,7 +476,7 @@ function UploadPanel({ title, description, departmentOptions, onSubmit, submitti
   )
 }
 
-function UploadList({ title, items, emptyText, onDelete, onDownload, onView }) {
+function UploadList({ title, items, emptyText, onDelete, onDownload, onView, canDeleteItem }) {
   return (
     <section className="office-panel">
       <div className="panel-header">
@@ -474,9 +511,11 @@ function UploadList({ title, items, emptyText, onDelete, onDownload, onView }) {
                 <button type="button" className="ghost-button" onClick={() => onDownload(item)}>
                   下载
                 </button>
-                <button type="button" className="ghost-button danger-button" onClick={() => onDelete(item)}>
-                  删除
-                </button>
+                {canDeleteItem?.(item) ? (
+                  <button type="button" className="ghost-button danger-button" onClick={() => onDelete(item)}>
+                    删除
+                  </button>
+                ) : null}
               </div>
             </article>
           ))}
@@ -493,7 +532,8 @@ function DocumentsPage({ onBack, user, departments, showBanner }) {
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState("")
-  const departmentOptions = getDepartmentViewOptions(user, departments).filter(Boolean)
+  const departmentOptions = getDepartmentViewOptions(user, departments, "company_files", "create").filter(Boolean)
+  const canUpload = hasAnyMatrixAction(user, "company_files", ["create"])
 
   const loadFiles = async () => {
     setLoading(true)
@@ -558,17 +598,19 @@ function DocumentsPage({ onBack, user, departments, showBanner }) {
 
       {error ? <div className="status-card error-card">{error}</div> : null}
 
-      <section className="ledger-upload-grid single-column">
-        <div className="office-panel">
-          <UploadPanel
-            title="上传公司文件"
-            description="支持图片、PDF、Office 表格、文本、压缩包等常用资料。"
-            departmentOptions={departmentOptions}
-            onSubmit={handleUpload}
-            submitting={uploading}
-          />
-        </div>
-      </section>
+      {canUpload ? (
+        <section className="ledger-upload-grid single-column">
+          <div className="office-panel">
+            <UploadPanel
+              title="上传公司文件"
+              description="支持图片、PDF、Office 表格、文本、压缩包等常用资料。"
+              departmentOptions={departmentOptions}
+              onSubmit={handleUpload}
+              submitting={uploading}
+            />
+          </div>
+        </section>
+      ) : null}
 
       <UploadList
         title="公司文件列表"
@@ -577,6 +619,7 @@ function DocumentsPage({ onBack, user, departments, showBanner }) {
         onDelete={handleDelete}
         onDownload={handleDownload}
         onView={handleView}
+        canDeleteItem={(item) => hasMatrixPermission(user, "company_files", "delete", item.department)}
       />
     </OfficeModulePage>
   )
@@ -587,7 +630,8 @@ function LearningPage({ onBack, user, departments, showBanner }) {
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState("")
-  const departmentOptions = getDepartmentViewOptions(user, departments).filter(Boolean)
+  const departmentOptions = getDepartmentViewOptions(user, departments, "study_articles", "create").filter(Boolean)
+  const canUpload = hasAnyMatrixAction(user, "study_articles", ["create"])
 
   const loadArticles = async () => {
     setLoading(true)
@@ -652,17 +696,19 @@ function LearningPage({ onBack, user, departments, showBanner }) {
 
       {error ? <div className="status-card error-card">{error}</div> : null}
 
-      <section className="ledger-upload-grid single-column">
-        <div className="office-panel">
-          <UploadPanel
-            title="上传学习文章"
-            description="支持 PDF、Word、PPT、文本、Markdown、HTML 和压缩包。"
-            departmentOptions={departmentOptions}
-            onSubmit={handleUpload}
-            submitting={uploading}
-          />
-        </div>
-      </section>
+      {canUpload ? (
+        <section className="ledger-upload-grid single-column">
+          <div className="office-panel">
+            <UploadPanel
+              title="上传学习文章"
+              description="支持 PDF、Word、PPT、文本、Markdown、HTML 和压缩包。"
+              departmentOptions={departmentOptions}
+              onSubmit={handleUpload}
+              submitting={uploading}
+            />
+          </div>
+        </section>
+      ) : null}
 
       <UploadList
         title="学习文章列表"
@@ -671,6 +717,7 @@ function LearningPage({ onBack, user, departments, showBanner }) {
         onDelete={handleDelete}
         onDownload={handleDownload}
         onView={handleView}
+        canDeleteItem={(item) => hasMatrixPermission(user, "study_articles", "delete", item.department)}
       />
     </OfficeModulePage>
   )
@@ -681,7 +728,8 @@ function LedgerWorkspacePage({ onBack, user, departments, showBanner }) {
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState("")
-  const departmentOptions = getDepartmentViewOptions(user, departments).filter(Boolean)
+  const departmentOptions = getDepartmentViewOptions(user, departments, "ledgers", "create").filter(Boolean)
+  const canUpload = hasAnyMatrixAction(user, "ledgers", ["create"])
 
   const loadLists = async () => {
     setLoading(true)
@@ -752,17 +800,19 @@ function LedgerWorkspacePage({ onBack, user, departments, showBanner }) {
 
       {error ? <div className="status-card error-card">{error}</div> : null}
 
-      <section className="ledger-upload-grid single-column">
-        <div className="office-panel">
-          <UploadPanel
-            title="上传台账"
-            description="用于工作台账、日报、月报、Excel 表格等。"
-            departmentOptions={departmentOptions}
-            onSubmit={handleLedgerUpload}
-            submitting={uploading}
-          />
-        </div>
-      </section>
+      {canUpload ? (
+        <section className="ledger-upload-grid single-column">
+          <div className="office-panel">
+            <UploadPanel
+              title="上传台账"
+              description="用于工作台账、日报、月报、Excel 表格等。"
+              departmentOptions={departmentOptions}
+              onSubmit={handleLedgerUpload}
+              submitting={uploading}
+            />
+          </div>
+        </section>
+      ) : null}
 
       <UploadList
         title="台账列表"
@@ -771,6 +821,7 @@ function LedgerWorkspacePage({ onBack, user, departments, showBanner }) {
         onDelete={handleDeleteLedger}
         onDownload={handleDownload}
         onView={handleView}
+        canDeleteItem={(item) => hasMatrixPermission(user, "ledgers", "delete", item.department)}
       />
     </OfficeModulePage>
   )
@@ -1294,7 +1345,7 @@ function App() {
     )
   }
 
-  if (currentPage === PAGE_STRUCTURE && hasPermission(user, "structure")) {
+  if (currentPage === PAGE_STRUCTURE && hasMatrixReadPermission(user, "structure")) {
     return (
       <div className="app-shell office-page-shell">
         <StructurePage user={user} employees={employees} onBack={openDashboardPage} />

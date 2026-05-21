@@ -9,21 +9,18 @@ import jwt
 from jwt import InvalidTokenError
 
 
-DEFAULT_PERMISSIONS = ["camera", "study_view", "structure"]
-ADMIN_PERMISSIONS = [
-    "camera",
-    "camera_all_departments",
-    "company_files_view",
-    "company_files_edit",
-    "study_view",
-    "study_edit",
-    "ledger_view",
-    "ledger_upload",
-    "structure",
+DEFAULT_PERMISSIONS = [
+    "perm:photos:*:read",
+    "perm:study_articles:*:read",
+    "perm:ledgers:*:read",
+    "perm:structure:*:read",
 ]
+ADMIN_PERMISSIONS: list[str] = []
 DEPARTMENT_PERMISSION_PREFIX = "dept_"
 MATRIX_PERMISSION_PREFIX = "perm:"
 ALL_DEPARTMENTS = "*"
+VALID_PERMISSION_SYSTEMS = {"photos", "company_files", "study_articles", "ledgers", "structure"}
+VALID_PERMISSION_ACTIONS = {"read", "create", "update", "delete"}
 JWT_SECRET = "photo-monitor-jwt-secret"
 JWT_ALGORITHM = "HS256"
 JWT_ISSUER = "photo-monitor"
@@ -68,7 +65,12 @@ def parse_matrix_permission(permission: str) -> tuple[str, str, str] | None:
     parts = permission[len(MATRIX_PERMISSION_PREFIX) :].split(":")
     if len(parts) != 3 or not all(parts):
         return None
-    return parts[0], parts[1], parts[2]
+    system, department, action = parts
+    if system not in VALID_PERMISSION_SYSTEMS or action not in VALID_PERMISSION_ACTIONS:
+        return None
+    if system == "structure" and action != "read":
+        return None
+    return system, department, action
 
 
 def extract_matrix_departments(permissions: list[str] | None, system: str, action: str) -> list[str]:
@@ -85,6 +87,24 @@ def extract_matrix_departments(permissions: list[str] | None, system: str, actio
     return list(dict.fromkeys(departments))
 
 
+def extract_permission_departments(permissions: list[str] | None) -> list[str]:
+    if not permissions:
+        return []
+    departments = []
+    for permission in permissions:
+        parsed = parse_matrix_permission(permission)
+        if parsed:
+            _, department, _ = parsed
+            if department != ALL_DEPARTMENTS:
+                departments.append(department)
+            continue
+        if isinstance(permission, str) and permission.startswith(DEPARTMENT_PERMISSION_PREFIX):
+            department = _normalize_department_name(permission[len(DEPARTMENT_PERMISSION_PREFIX) :])
+            if department:
+                departments.append(department)
+    return list(dict.fromkeys(departments))
+
+
 def has_matrix_permission(user: dict, system: str, action: str, department: str | None = None) -> bool:
     if user.get("role") == "admin":
         return True
@@ -96,6 +116,19 @@ def has_matrix_permission(user: dict, system: str, action: str, department: str 
         build_matrix_permission(system, ALL_DEPARTMENTS, action),
     }
     return any(permission in candidates for permission in permissions)
+
+
+def user_has_any_matrix_permission(user: dict, system: str, actions: set[str]) -> bool:
+    if user.get("role") == "admin":
+        return True
+    for permission in user.get("permissions") or []:
+        parsed = parse_matrix_permission(permission)
+        if not parsed:
+            continue
+        perm_system, _, action = parsed
+        if perm_system == system and action in actions:
+            return True
+    return False
 
 
 @dataclass
@@ -138,7 +171,7 @@ class User:
             "avatar": self.avatar,
             "join_date": self.join_date,
             "permissions": self.permissions,
-            "department_permissions": extract_department_permissions(self.permissions),
+            "department_permissions": extract_permission_departments(self.permissions),
             "permission_matrix": self.permissions,
         }
 
@@ -156,7 +189,10 @@ class User:
             rank=data.get("rank", ""),
             avatar=data.get("avatar", ""),
             join_date=data.get("join_date", ""),
-            permissions=EmployeeSystem.normalize_permissions(data.get("permissions", DEFAULT_PERMISSIONS.copy())),
+            permissions=EmployeeSystem.normalize_permissions(
+                data.get("permissions", DEFAULT_PERMISSIONS.copy()),
+                data.get("department", ""),
+            ),
         )
 
 
@@ -210,7 +246,7 @@ class EmployeeSystem:
         for user in self.get_all_employees():
             if user.department:
                 departments.add(user.department)
-            departments.update(extract_department_permissions(user.permissions))
+            departments.update(extract_permission_departments(user.permissions))
         return sorted(departments)
 
     def create_employee(self, payload: dict) -> User:
@@ -225,17 +261,18 @@ class EmployeeSystem:
         if self.get_user(username):
             raise ValueError("该用户名已存在")
 
+        department = (payload.get("department") or "").strip()
         user = User(
             username=username,
             password=password,
             role="employee",
             phone=phone,
             name=(payload.get("name") or "").strip(),
-            department=(payload.get("department") or "").strip(),
+            department=department,
             position=(payload.get("position") or "").strip(),
             rank=(payload.get("rank") or "").strip(),
             avatar="👤",
-            permissions=self._normalize_permissions(payload.get("permissions")),
+            permissions=self._normalize_permissions(payload.get("permissions"), department),
         )
         self.users.append(user)
         self.save_data()
@@ -256,7 +293,7 @@ class EmployeeSystem:
         user.department = (payload.get("department", user.department) or "").strip()
         user.position = (payload.get("position", user.position) or "").strip()
         user.rank = (payload.get("rank", user.rank) or "").strip()
-        user.permissions = self._normalize_permissions(payload.get("permissions", user.permissions))
+        user.permissions = self._normalize_permissions(payload.get("permissions", user.permissions), user.department)
 
         password = (payload.get("password") or "").strip()
         if password:
@@ -297,7 +334,7 @@ class EmployeeSystem:
             raise ValueError("密码长度至少 3 位")
 
     @staticmethod
-    def normalize_permissions(permissions: list[str] | None) -> list[str]:
+    def normalize_permissions(permissions: list[str] | None, home_department: str = "") -> list[str]:
         if permissions is None:
             return DEFAULT_PERMISSIONS.copy()
         if isinstance(permissions, str):
@@ -305,14 +342,16 @@ class EmployeeSystem:
 
         alias_map = {
             "files": "company_files_view",
-            "photo_all_departments": "company_files_view",
+            "photo_all_departments": "camera_all_departments",
             "cross_dept_files": "company_files_edit",
             "study": "study_view",
             "ledger": "ledger_view",
             "upload": "ledger_upload",
             "photos": "camera",
         }
-        normalized_permissions = []
+        matrix_permissions = []
+        legacy_permissions = []
+        department_permissions = []
         for permission in permissions:
             if not isinstance(permission, str):
                 continue
@@ -320,34 +359,53 @@ class EmployeeSystem:
             cleaned = permission.strip()
             cleaned = alias_map.get(cleaned, cleaned)
             if cleaned.startswith(DEPARTMENT_PERMISSION_PREFIX):
-                cleaned = build_department_permission(cleaned[len(DEPARTMENT_PERMISSION_PREFIX) :])
+                department = _normalize_department_name(cleaned[len(DEPARTMENT_PERMISSION_PREFIX) :])
+                if department:
+                    department_permissions.append(department)
+                continue
+
+            parsed = parse_matrix_permission(cleaned)
+            if parsed:
+                system, department, action = parsed
+                matrix_permissions.append(build_matrix_permission(system, department, action))
+                continue
 
             if cleaned:
-                normalized_permissions.append(cleaned)
+                legacy_permissions.append(cleaned)
 
-        legacy_matrix = []
-        normalized_set = set(normalized_permissions)
         legacy_map = {
-            "camera": ("photos", "read"),
-            "camera_all_departments": ("photos", "read"),
-            "photo_upload": ("photos", "create"),
-            "company_files_view": ("company_files", "read"),
-            "company_files_edit": ("company_files", "create"),
-            "study_view": ("study_articles", "read"),
-            "study_edit": ("study_articles", "create"),
-            "ledger_view": ("ledgers", "read"),
-            "ledger_upload": ("ledgers", "create"),
+            "camera": ("photos", ("read",)),
+            "camera_all_departments": ("photos", ("read",)),
+            "photo_upload": ("photos", ("create",)),
+            "company_files_view": ("company_files", ("read",)),
+            "company_files_edit": ("company_files", ("create", "delete")),
+            "study_view": ("study_articles", ("read",)),
+            "study_edit": ("study_articles", ("create", "delete")),
+            "ledger_view": ("ledgers", ("read",)),
+            "ledger_upload": ("ledgers", ("create",)),
+            "structure": ("structure", ("read",)),
         }
-        for legacy_permission, (system, action) in legacy_map.items():
-            if legacy_permission in normalized_set:
-                legacy_matrix.append(build_matrix_permission(system, ALL_DEPARTMENTS, action))
-                if action == "create":
-                    legacy_matrix.append(build_matrix_permission(system, ALL_DEPARTMENTS, "delete"))
 
-        return list(dict.fromkeys([*normalized_permissions, *legacy_matrix]))
+        legacy_set = set(legacy_permissions)
+        home_department = _normalize_department_name(home_department)
+        legacy_department_candidates = []
+        if home_department:
+            legacy_department_candidates.append(home_department)
+        legacy_department_candidates.extend(department_permissions)
+        legacy_departments = list(dict.fromkeys(legacy_department_candidates))
+        if not legacy_departments:
+            legacy_departments = [ALL_DEPARTMENTS]
 
-    def _normalize_permissions(self, permissions: list[str] | None) -> list[str]:
-        return self.normalize_permissions(permissions)
+        for legacy_permission, (system, actions) in legacy_map.items():
+            if legacy_permission in legacy_set:
+                for action in actions:
+                    for department in legacy_departments:
+                        matrix_permissions.append(build_matrix_permission(system, department, action))
+
+        return list(dict.fromkeys(matrix_permissions))
+
+    def _normalize_permissions(self, permissions: list[str] | None, home_department: str = "") -> list[str]:
+        return self.normalize_permissions(permissions, home_department)
 
     def create_access_token(self, username: str) -> str:
         now = datetime.now(timezone.utc)

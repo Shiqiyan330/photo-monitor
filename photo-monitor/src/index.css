@@ -1392,15 +1392,16 @@ h4 {
   border: 1px solid #dde6ef;
   border-radius: 16px;
   background: white;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
 }
 
 .permission-matrix-head,
 .permission-matrix-row {
   display: grid;
-  grid-template-columns: minmax(90px, 1fr) minmax(110px, 1.1fr) repeat(4, 54px);
+  grid-template-columns: minmax(96px, 1fr) minmax(116px, 1.1fr) repeat(4, 54px) 68px;
   gap: 8px;
   align-items: center;
-  min-width: 520px;
+  min-width: 640px;
   padding: 10px 12px;
 }
 
@@ -1419,6 +1420,11 @@ h4 {
   color: #13202f;
   font-size: 0.9rem;
   font-weight: 700;
+  transition: background 0.16s var(--ease-out);
+}
+
+.permission-matrix-row:hover {
+  background: #fbfdff;
 }
 
 .permission-matrix-row > span:nth-child(2) {
@@ -1429,11 +1435,57 @@ h4 {
 .matrix-check {
   display: grid;
   place-items: center;
+  min-height: 30px;
+  border-radius: 9px;
+  transition: background 0.14s var(--ease-out), transform 0.14s var(--ease-out);
+}
+
+.matrix-check:not(.disabled):hover {
+  background: #edf8f3;
+  transform: scale(1.04);
+}
+
+.matrix-check.disabled {
+  opacity: 0.32;
 }
 
 .matrix-check input {
   width: 17px;
   height: 17px;
+  accent-color: var(--brand-green);
+  cursor: pointer;
+}
+
+.matrix-check.disabled input {
+  cursor: not-allowed;
+}
+
+.matrix-row-toggle {
+  border: 1px solid #d6e0ea;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #f5f8fb;
+  color: #526275;
+  font-size: 0.78rem;
+  font-weight: 800;
+  transition:
+    transform 0.14s var(--ease-out),
+    border-color 0.14s var(--ease-out),
+    background 0.14s var(--ease-out),
+    color 0.14s var(--ease-out);
+}
+
+.matrix-row-toggle:hover {
+  transform: translateY(-1px);
+  border-color: rgba(31, 168, 117, 0.36);
+  background: #edf8f3;
+  color: #13734f;
+}
+
+.matrix-row-toggle.active {
+  border-color: rgba(211, 133, 15, 0.28);
+  background: rgba(255, 244, 225, 0.96);
+  color: #9a6210;
 }
 
 .permission-chip {

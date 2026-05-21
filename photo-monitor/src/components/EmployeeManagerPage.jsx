@@ -1,17 +1,6 @@
 import { useMemo, useState } from "react"
 
-const FEATURE_PERMISSION_OPTIONS = [
-  { value: "camera", label: "照片查看", description: "查看本人有权限部门的监控照片" },
-  { value: "camera_all_departments", label: "全部门照片", description: "查看所有部门的监控照片" },
-  { value: "photo_upload", label: "照片上传", description: "允许本地脚本或接口上传监控照片" },
-  { value: "company_files_view", label: "公司文件", description: "访问公司文件页面和文件列表" },
-  { value: "company_files_edit", label: "公司文件上传/删除", description: "上传或删除公司文件" },
-  { value: "study_view", label: "学习交流查看", description: "访问学习文章列表和在线查看" },
-  { value: "study_edit", label: "学习交流上传/删除", description: "上传或删除学习文章" },
-  { value: "ledger_view", label: "台账查看", description: "访问台账列表和在线查看" },
-  { value: "ledger_upload", label: "台账上传", description: "上传台账文件" },
-  { value: "structure", label: "公司架构", description: "查看组织架构和员工联系方式" },
-]
+const DEFAULT_DEPARTMENTS = ["大茅山", "湄江", "雪峰山", "浙江之心", "总公司"]
 
 const EMPTY_FORM = {
   username: "",
@@ -21,14 +10,15 @@ const EMPTY_FORM = {
   department: "",
   position: "",
   rank: "",
-  permissions: ["camera", "study_view", "ledger_view", "structure"],
+  permissions: [],
 }
 
 const PERMISSION_SYSTEMS = [
-  { value: "photos", label: "照片" },
-  { value: "company_files", label: "公司文件" },
-  { value: "study_articles", label: "学习交流" },
-  { value: "ledgers", label: "台账" },
+  { value: "photos", label: "照片", actions: ["read", "create", "update", "delete"] },
+  { value: "company_files", label: "公司文件", actions: ["read", "create", "update", "delete"] },
+  { value: "study_articles", label: "学习交流", actions: ["read", "create", "update", "delete"] },
+  { value: "ledgers", label: "台账", actions: ["read", "create", "update", "delete"] },
+  { value: "structure", label: "公司架构", actions: ["read"] },
 ]
 
 const PERMISSION_ACTIONS = [
@@ -38,22 +28,61 @@ const PERMISSION_ACTIONS = [
   { value: "delete", label: "删" },
 ]
 
-function buildDepartmentPermission(department) {
-  return `dept_${department}`
-}
-
 function buildMatrixPermission(system, department, action) {
   return `perm:${system}:${department || "*"}:${action}`
 }
 
-function getDepartmentPermissions(employee) {
-  if (Array.isArray(employee.department_permissions)) {
-    return employee.department_permissions
+function parseMatrixPermission(permission) {
+  if (typeof permission !== "string" || !permission.startsWith("perm:")) {
+    return null
+  }
+  const parts = permission.slice(5).split(":")
+  if (parts.length !== 3 || parts.some((item) => !item)) {
+    return null
+  }
+  return { system: parts[0], department: parts[1], action: parts[2] }
+}
+
+function getMatrixDepartments(employee) {
+  return (employee.permissions ?? [])
+    .map(parseMatrixPermission)
+    .filter(Boolean)
+    .map((item) => item.department)
+    .filter((item) => item && item !== "*")
+}
+
+function isActionAvailable(system, action) {
+  return system.actions.includes(action.value)
+}
+
+function summarizePermissions(employee) {
+  const grouped = new Map()
+
+  for (const permission of employee.permissions ?? []) {
+    const parsed = parseMatrixPermission(permission)
+    if (!parsed) {
+      continue
+    }
+    const system = PERMISSION_SYSTEMS.find((item) => item.value === parsed.system)
+    const action = PERMISSION_ACTIONS.find((item) => item.value === parsed.action)
+    if (!system || !action) {
+      continue
+    }
+
+    const key = `${system.value}:${parsed.department}`
+    if (!grouped.has(key)) {
+      grouped.set(key, {
+        system: system.label,
+        department: parsed.department === "*" ? "全部部门" : parsed.department,
+        actions: [],
+      })
+    }
+    grouped.get(key).actions.push(action.label)
   }
 
-  return (employee.permissions ?? [])
-    .filter((item) => item.startsWith("dept_"))
-    .map((item) => item.slice(5))
+  return Array.from(grouped.values())
+    .slice(0, 3)
+    .map((item) => `${item.system}/${item.department}: ${item.actions.join("")}`)
 }
 
 export default function EmployeeManagerPage({
@@ -71,10 +100,11 @@ export default function EmployeeManagerPage({
 
   const departmentOptions = useMemo(() => {
     const values = [
+      ...DEFAULT_DEPARTMENTS,
       ...(departments ?? []),
       ...(form.department ? [form.department] : []),
       ...employees.map((item) => item.department).filter(Boolean),
-      ...employees.flatMap((item) => getDepartmentPermissions(item)),
+      ...employees.flatMap((item) => getMatrixDepartments(item)),
     ]
 
     return Array.from(new Set(values.map((item) => item.trim()).filter(Boolean))).sort((left, right) =>
@@ -82,14 +112,6 @@ export default function EmployeeManagerPage({
     )
   }, [departments, employees, form.department])
 
-  const departmentPermissionOptions = useMemo(
-    () =>
-      departmentOptions.map((item) => ({
-        value: buildDepartmentPermission(item),
-        label: item,
-      })),
-    [departmentOptions],
-  )
   const matrixDepartmentOptions = useMemo(() => ["*", ...departmentOptions], [departmentOptions])
 
   const groupedEmployees = useMemo(() => {
@@ -137,7 +159,7 @@ export default function EmployeeManagerPage({
       department: employee.department ?? "",
       position: employee.position ?? "",
       rank: employee.rank ?? "",
-      permissions: employee.permissions ?? [],
+      permissions: (employee.permissions ?? []).filter((item) => parseMatrixPermission(item)),
     })
     setError("")
   }
@@ -158,6 +180,18 @@ export default function EmployeeManagerPage({
     })
   }
 
+  const toggleDepartmentSystem = (system, department) => {
+    const rowPermissions = system.actions.map((action) => buildMatrixPermission(system.value, department, action))
+    const allSelected = rowPermissions.every((permission) => form.permissions.includes(permission))
+
+    setForm((current) => ({
+      ...current,
+      permissions: allSelected
+        ? current.permissions.filter((item) => !rowPermissions.includes(item))
+        : Array.from(new Set([...current.permissions, ...rowPermissions])),
+    }))
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     setSaving(true)
@@ -172,6 +206,7 @@ export default function EmployeeManagerPage({
         department: form.department.trim(),
         position: form.position.trim(),
         rank: form.rank.trim(),
+        permissions: form.permissions.filter((item) => parseMatrixPermission(item)),
       }
 
       if (editingUsername) {
@@ -285,79 +320,56 @@ export default function EmployeeManagerPage({
             </label>
 
             <div className="field">
-              <span>权限</span>
+              <span>系统-部门-增删改查权限</span>
+              <p className="field-hint">
+                按“某人、某系统、某部门、增删改查”授权，全部部门代表通配符 *。
+              </p>
 
-              <div className="permission-sections">
-                <section className="permission-section">
-                  <div className="permission-section-head">
-                    <div>
-                      <div className="permission-title">系统-部门-增删改查权限</div>
-                      <p className="field-hint">
-                        按“某人、某系统、某部门、增删改查”授权，* 表示全部部门。
-                      </p>
-                    </div>
-                  </div>
+              <div className="permission-matrix">
+                <div className="permission-matrix-head">
+                  <span>系统</span>
+                  <span>部门</span>
+                  {PERMISSION_ACTIONS.map((action) => (
+                    <span key={action.value}>{action.label}</span>
+                  ))}
+                  <span>整行</span>
+                </div>
+                {PERMISSION_SYSTEMS.flatMap((system) =>
+                  matrixDepartmentOptions.map((department) => {
+                    const rowPermissions = system.actions.map((action) =>
+                      buildMatrixPermission(system.value, department, action),
+                    )
+                    const allSelected = rowPermissions.every((permission) => form.permissions.includes(permission))
 
-                  <div className="permission-matrix">
-                    <div className="permission-matrix-head">
-                      <span>系统</span>
-                      <span>部门</span>
-                      {PERMISSION_ACTIONS.map((action) => (
-                        <span key={action.value}>{action.label}</span>
-                      ))}
-                    </div>
-                    {PERMISSION_SYSTEMS.flatMap((system) =>
-                      matrixDepartmentOptions.map((department) => (
-                        <div key={`${system.value}-${department}`} className="permission-matrix-row">
-                          <span>{system.label}</span>
-                          <span>{department === "*" ? "全部部门" : department}</span>
-                          {PERMISSION_ACTIONS.map((action) => {
-                            const permission = buildMatrixPermission(system.value, department, action.value)
-                            return (
-                              <label key={permission} className="matrix-check">
-                                <input
-                                  type="checkbox"
-                                  checked={form.permissions.includes(permission)}
-                                  onChange={() => togglePermission(permission)}
-                                />
-                              </label>
-                            )
-                          })}
-                        </div>
-                      )),
-                    )}
-                  </div>
-                </section>
-
-                <section className="permission-section">
-                  <div className="permission-section-head">
-                    <div>
-                      <div className="permission-title">兼容功能权限</div>
-                      <p className="field-hint">
-                        用于兼容旧账号和页面入口控制。新权限请优先在上方矩阵配置。
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="permission-grid">
-                    {[...FEATURE_PERMISSION_OPTIONS, ...departmentPermissionOptions].map((item) => {
-                      const checked = form.permissions.includes(item.value)
-                      return (
-                        <label key={item.value} className={checked ? "permission-chip active" : "permission-chip"}>
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => togglePermission(item.value)}
-                          />
-                          <span>
-                            <strong>{item.label}</strong>
-                            {item.description ? <small>{item.description}</small> : null}
-                          </span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                </section>
+                    return (
+                      <div key={`${system.value}-${department}`} className="permission-matrix-row">
+                        <span>{system.label}</span>
+                        <span>{department === "*" ? "全部部门" : department}</span>
+                        {PERMISSION_ACTIONS.map((action) => {
+                          const available = isActionAvailable(system, action)
+                          const permission = buildMatrixPermission(system.value, department, action.value)
+                          return (
+                            <label key={permission} className={available ? "matrix-check" : "matrix-check disabled"}>
+                              <input
+                                type="checkbox"
+                                disabled={!available}
+                                checked={available && form.permissions.includes(permission)}
+                                onChange={() => togglePermission(permission)}
+                              />
+                            </label>
+                          )
+                        })}
+                        <button
+                          type="button"
+                          className={allSelected ? "matrix-row-toggle active" : "matrix-row-toggle"}
+                          onClick={() => toggleDepartmentSystem(system, department)}
+                        >
+                          {allSelected ? "清除" : "全选"}
+                        </button>
+                      </div>
+                    )
+                  }),
+                )}
               </div>
             </div>
 
@@ -392,7 +404,7 @@ export default function EmployeeManagerPage({
 
                   <div className="employee-table">
                     {group.members.map((employee) => {
-                      const departmentPermissions = getDepartmentPermissions(employee)
+                      const summaries = summarizePermissions(employee)
                       return (
                         <div key={employee.username} className="employee-row">
                           <div>
@@ -403,12 +415,12 @@ export default function EmployeeManagerPage({
                               {employee.rank ? ` / ${employee.rank}` : ""}
                             </div>
                             <div className="employee-tags">
-                              <span className="employee-tag">{(employee.permissions ?? []).length} 项权限</span>
-                              {departmentPermissions.length ? (
-                                <span className="employee-tag accent">
-                                  {departmentPermissions.length} 个部门权限
+                              <span className="employee-tag">{(employee.permissions ?? []).length} 项矩阵权限</span>
+                              {summaries.map((summary) => (
+                                <span key={summary} className="employee-tag accent">
+                                  {summary}
                                 </span>
-                              ) : null}
+                              ))}
                             </div>
                           </div>
 

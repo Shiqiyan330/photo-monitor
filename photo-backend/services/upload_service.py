@@ -332,7 +332,7 @@ def list_data_uploads(base: Path, category: str, user: dict) -> list[dict]:
     return sorted(items, key=lambda item: item["time"], reverse=True)
 
 
-def get_data_upload(base: Path, category: str, upload_id: str, user: dict) -> tuple[Path, dict]:
+def get_data_upload(base: Path, category: str, upload_id: str, user: dict, action: str = "read") -> tuple[Path, dict]:
     category = normalize_category(category)
     _category_config(category)
     metadata = _read_metadata(base)
@@ -340,7 +340,7 @@ def get_data_upload(base: Path, category: str, upload_id: str, user: dict) -> tu
     if not item or item.get("category") != category:
         raise HTTPException(status_code=404, detail="File not found")
 
-    allowed_departments = None if user["role"] == "admin" else get_accessible_departments(user, CATEGORY_SYSTEMS[category], "read")
+    allowed_departments = None if user["role"] == "admin" else get_accessible_departments(user, CATEGORY_SYSTEMS[category], action)
     if allowed_departments is not None and item.get("department") not in allowed_departments:
         raise HTTPException(status_code=403, detail="No permission to access this file")
 
@@ -354,7 +354,7 @@ def get_data_upload(base: Path, category: str, upload_id: str, user: dict) -> tu
 
 def delete_data_upload(base: Path, category: str, upload_id: str, user: dict) -> dict:
     category = normalize_category(category)
-    target, item = get_data_upload(base, category, upload_id, user)
+    target, item = get_data_upload(base, category, upload_id, user, action="delete")
     ensure_department_action_allowed(user, CATEGORY_SYSTEMS[category], item.get("department", ""), "delete")
 
     metadata = _read_metadata(base)
