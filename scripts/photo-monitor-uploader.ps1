@@ -642,7 +642,7 @@ function Get-UploaderRunProcesses {
       continue
     }
     $commandLine = [string]$process.CommandLine
-    if ($commandLine -match $escapedScript -and $commandLine -match '(^|\s|")run("|\s|$)') {
+    if ($commandLine -match "(?i)(^|\s)-File\s+`"?$escapedScript`"?(\s|$)" -and $commandLine -match '(^|\s|")run("|\s|$)') {
       $process
     }
   }
@@ -720,13 +720,30 @@ function Write-DoctorLine {
   Write-Host "$Level  $Message"
 }
 
+function Redact-SensitiveText {
+  param([string]$Text)
+
+  if ($null -eq $Text) {
+    return ""
+  }
+
+  $redacted = $Text
+  $redacted = $redacted -replace '(?i)\bAuthorization\s*[:=]\s*Bearer\s+\S+', 'Authorization: Bearer [redacted]'
+  $redacted = $redacted -replace '(?i)\bBearer\s+[A-Za-z0-9._~+/\-=]+', 'Bearer [redacted]'
+  $redacted = $redacted -replace '(?i)("(?:token|password|passwd|pwd|secret)"\s*:\s*)"[^"]*"', '$1"[redacted]"'
+  $redacted = $redacted -replace "(?i)\b(token|password|passwd|pwd|secret)\s*=\s*(`"[^`"]*`"|'[^']*'|\S+)", '$1=[redacted]'
+  return $redacted
+}
+
 function Get-RecentProblemLogLines {
   if (-not (Test-Path -LiteralPath $LogFile)) {
     return @()
   }
   @(Get-Content -LiteralPath $LogFile -Tail 80 -Encoding UTF8 | Where-Object {
     $_ -match "failed|error|timeout|denied|invalid|not found"
-  } | Select-Object -Last 8)
+  } | Select-Object -Last 8 | ForEach-Object {
+    Redact-SensitiveText $_
+  })
 }
 
 function Show-Logs {
@@ -740,7 +757,6 @@ function Show-Logs {
 }
 
 function Invoke-Doctor {
-  Update-ConfigFromParameters
   Write-Host "Photo Monitor Uploader doctor"
   Write-Host "config: $ConfigFile"
   Write-Host "log: $LogFile"
