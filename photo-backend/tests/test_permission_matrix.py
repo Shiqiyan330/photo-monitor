@@ -206,3 +206,83 @@ def test_structure_employee_listing_returns_scoped_departments(tmp_path, monkeyp
     )
 
     assert [employee["username"] for employee in result["employees"]] == ["leader", "ticket"]
+
+
+def test_structure_employee_listing_rejects_user_without_matrix_read_permission(tmp_path, monkeypatch):
+    from routers import structure
+
+    system = make_employee_system(tmp_path)
+    system.create_employee(
+        {
+            "username": "viewer",
+            "password": "viewer",
+            "department": "总公司/运营部",
+            "permissions": [build_matrix_permission("photos", "总公司/运营部", "read")],
+        }
+    )
+    monkeypatch.setattr(structure, "employee_system", system)
+
+    with pytest.raises(HTTPException) as error:
+        structure.list_structure_employees(
+            user=system.get_user("viewer").to_public_dict(),
+        )
+
+    assert error.value.status_code == 403
+
+
+def test_structure_employee_listing_wildcard_permission_returns_all_departments(tmp_path, monkeypatch):
+    from routers import structure
+
+    system = make_employee_system(tmp_path)
+    system.create_employee(
+        {
+            "username": "viewer",
+            "password": "viewer",
+            "department": "总公司/运营部",
+            "permissions": [build_matrix_permission("structure", "*", "read")],
+        }
+    )
+    system.create_employee(
+        {
+            "username": "finance",
+            "password": "finance",
+            "department": "总公司/财务部",
+            "permissions": [],
+        }
+    )
+    monkeypatch.setattr(structure, "employee_system", system)
+
+    result = structure.list_structure_employees(
+        user=system.get_user("viewer").to_public_dict(),
+    )
+
+    assert [employee["username"] for employee in result["employees"]] == ["viewer", "finance"]
+
+
+def test_structure_employee_listing_admin_returns_all_departments(tmp_path, monkeypatch):
+    from routers import structure
+
+    system = make_employee_system(tmp_path)
+    system.create_employee(
+        {
+            "username": "ticket",
+            "password": "ticket",
+            "department": "总公司/运营部/票务",
+            "permissions": [],
+        }
+    )
+    system.create_employee(
+        {
+            "username": "finance",
+            "password": "finance",
+            "department": "总公司/财务部",
+            "permissions": [],
+        }
+    )
+    monkeypatch.setattr(structure, "employee_system", system)
+
+    result = structure.list_structure_employees(
+        user=system.get_user("admin").to_public_dict(),
+    )
+
+    assert [employee["username"] for employee in result["employees"]] == ["ticket", "finance"]

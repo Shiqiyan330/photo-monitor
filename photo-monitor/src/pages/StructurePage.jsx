@@ -1,18 +1,11 @@
 import { useState } from "react"
-import { getStructureVisibleDepartments, uniqueStrings } from "../permissions"
 import { OfficeModulePage } from "./OfficeUploadPage"
 
-export default function StructurePage({ onBack, user, employees }) {
+export default function StructurePage({ onBack, employees }) {
   const [collapsedDepartments, setCollapsedDepartments] = useState(new Set())
-  const allDepartments = uniqueStrings(employees.map((employee) => employee.department))
-  const visibleDepartments = getStructureVisibleDepartments(user, allDepartments)
-  const visibleEmployees =
-    user.role === "admin"
-      ? employees
-      : employees.filter((employee) => visibleDepartments.includes(employee.department || ""))
   const groups = new Map()
 
-  for (const employee of visibleEmployees) {
+  for (const employee of employees) {
     const department = employee.department || "未分配部门"
     if (!groups.has(department)) {
       groups.set(department, [])
@@ -69,4 +62,3 @@ export default function StructurePage({ onBack, user, employees }) {
     </OfficeModulePage>
   )
 }
-

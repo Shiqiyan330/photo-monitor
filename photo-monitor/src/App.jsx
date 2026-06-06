@@ -243,11 +243,11 @@ function App() {
   }, [user])
 
   useEffect(() => {
-    if (!user || user.role !== "admin") {
+    if (!user || user.role !== "admin" || currentPage !== PAGE_EMPLOYEES) {
       const timer = window.setTimeout(() => {
-        setEmployees([])
-        setDepartments([])
         if (currentPage === PAGE_EMPLOYEES) {
+          setEmployees([])
+          setDepartments([])
           setRoute(PAGE_DASHBOARD)
         }
       }, 0)
@@ -259,7 +259,7 @@ function App() {
   }, [currentPage, loadEmployees, user])
 
   useEffect(() => {
-    if (!user || user.role === "admin" || currentPage !== PAGE_STRUCTURE || !hasMatrixReadPermission(user, "structure")) {
+    if (!user || currentPage !== PAGE_STRUCTURE || !hasMatrixReadPermission(user, "structure")) {
       return
     }
 
@@ -439,7 +439,7 @@ function App() {
   if (currentPage === PAGE_STRUCTURE && hasMatrixReadPermission(user, "structure")) {
     return (
       <div className="app-shell office-page-shell">
-        <StructurePage user={user} employees={employees} onBack={openDashboardPage} />
+        <StructurePage employees={employees} onBack={openDashboardPage} />
       </div>
     )
   }
