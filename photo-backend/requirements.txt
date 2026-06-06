@@ -5,3 +5,8 @@ PyJWT==2.10.1
 watchdog==6.0.0
 Pillow==10.4.0
 python-multipart==0.0.20
+alibabacloud_dysmsapi20170525==4.5.1
+alibabacloud_credentials
+alibabacloud_tea_openapi
+alibabacloud_tea_util
+python-dotenv

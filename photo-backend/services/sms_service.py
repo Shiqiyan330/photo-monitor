@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import json
 import os
+import threading
+import time
 from dataclasses import dataclass
 from datetime import date, datetime
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -94,3 +98,111 @@ def build_due_reminders(employees: list[dict], today: date, settings: SmsSetting
                 )
 
     return reminders
+
+
+class SmsLogStore:
+    def __init__(self, path: Path):
+        self.path = path
+
+    def load(self) -> list[dict]:
+        if not self.path.exists():
+            return []
+        with self.path.open("r", encoding="utf-8") as file:
+            return json.load(file)
+
+    def save(self, items: list[dict]) -> None:
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        with self.path.open("w", encoding="utf-8") as file:
+            json.dump(items, file, ensure_ascii=False, indent=2)
+
+    def has_success(self, key: str) -> bool:
+        return any(item.get("key") == key and item.get("status") == "success" for item in self.load())
+
+    def append(self, item: dict) -> None:
+        items = self.load()
+        items.append(item)
+        self.save(items)
+
+
+class AliyunSmsSender:
+    def send(self, phone: str, sign_name: str, template_code: str, template_params: dict) -> dict:
+        from alibabacloud_credentials.client import Client as CredentialClient
+        from alibabacloud_dysmsapi20170525 import models as dysms_models
+        from alibabacloud_dysmsapi20170525.client import Client
+        from alibabacloud_tea_openapi import models as open_api_models
+        from alibabacloud_tea_util import models as util_models
+
+        config = open_api_models.Config(credential=CredentialClient())
+        config.endpoint = "dysmsapi.aliyuncs.com"
+        client = Client(config)
+        request = dysms_models.SendSmsRequest(
+            phone_numbers=phone,
+            sign_name=sign_name,
+            template_code=template_code,
+            template_param=json.dumps(template_params, ensure_ascii=False),
+        )
+        response = client.send_sms_with_options(request, util_models.RuntimeOptions())
+        return {
+            "request_id": getattr(response.body, "request_id", ""),
+            "code": getattr(response.body, "code", ""),
+        }
+
+
+def run_due_reminders(
+    employees: list[dict],
+    today: date | None = None,
+    settings: SmsSettings | None = None,
+    sender: AliyunSmsSender | None = None,
+) -> dict:
+    today = today or date.today()
+    settings = settings or load_sms_settings()
+    store = SmsLogStore(Path(settings.log_file))
+    sender = sender or AliyunSmsSender()
+    result = {"sent": [], "skipped": [], "failed": []}
+
+    for reminder in build_due_reminders(employees, today=today, settings=settings):
+        if store.has_success(reminder["key"]):
+            result["skipped"].append({**reminder, "reason": "already_sent"})
+            continue
+
+        log_item = {
+            **reminder,
+            "sent_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "dry_run": not settings.enabled,
+        }
+
+        try:
+            if settings.enabled:
+                provider_response = sender.send(
+                    reminder["phone"],
+                    settings.sign_name,
+                    reminder["template_code"],
+                    reminder["template_params"],
+                )
+            else:
+                provider_response = {"dry_run": True}
+            log_item.update({"status": "success", "provider_response": provider_response})
+            store.append(log_item)
+            result["sent"].append(log_item)
+        except Exception as error:
+            log_item.update({"status": "failed", "error": str(error)})
+            store.append(log_item)
+            result["failed"].append(log_item)
+
+    return result
+
+
+def start_sms_scheduler(employee_system) -> None:
+    state = {"last_run_date": ""}
+
+    def run_loop() -> None:
+        while True:
+            settings = load_sms_settings()
+            now = datetime.now()
+            today_text = now.date().isoformat()
+            if now.strftime("%H:%M") == settings.daily_send_time and state["last_run_date"] != today_text:
+                run_due_reminders([user.to_public_dict() for user in employee_system.get_all_employees()])
+                state["last_run_date"] = today_text
+            time.sleep(60)
+
+    threading.Thread(target=run_loop, daemon=True).start()

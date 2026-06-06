@@ -5,9 +5,11 @@ import pytest
 
 from services.auth_service import EmployeeSystem
 from services.sms_service import (
+    SmsLogStore,
     SmsSettings,
     build_due_reminders,
     parse_birthday_from_id_number,
+    run_due_reminders,
     resolve_employee_birthday,
 )
 
@@ -144,3 +146,56 @@ def test_build_due_reminders_includes_birthday_and_certificate():
         "certName": "特种设备作业证",
         "dueDate": "2026-09-04",
     }
+
+
+def test_sms_dry_run_logs_success_once(tmp_path):
+    settings = SmsSettings(enabled=False, log_file=str(tmp_path / "sms_logs.json"))
+    employees = [
+        {
+            "username": "worker",
+            "name": "员工甲",
+            "phone": "13800000000",
+            "birthday": "1990-06-06",
+            "id_number": "",
+            "certificates": [],
+        }
+    ]
+
+    first = run_due_reminders(employees, today=date(2026, 6, 6), settings=settings)
+    second = run_due_reminders(employees, today=date(2026, 6, 6), settings=settings)
+    logs = SmsLogStore(Path(settings.log_file)).load()
+
+    assert len(first["sent"]) == 1
+    assert first["sent"][0]["dry_run"] is True
+    assert second["skipped"][0]["reason"] == "already_sent"
+    assert len(logs) == 1
+
+
+def test_admin_sms_endpoints_require_admin(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from main import app
+    from routers import admin, auth, deps, structure, upload, ws
+
+    system = make_employee_system(tmp_path)
+    system.create_employee(
+        {
+            "username": "viewer",
+            "password": "viewer",
+            "phone": "13800000000",
+            "department": "总公司",
+            "permissions": [],
+        }
+    )
+    monkeypatch.setattr(admin, "employee_system", system)
+    monkeypatch.setattr(auth, "employee_system", system)
+    monkeypatch.setattr(deps, "employee_system", system)
+    monkeypatch.setattr(structure, "employee_system", system)
+    monkeypatch.setattr(upload, "employee_system", system)
+    monkeypatch.setattr(ws, "employee_system", system)
+
+    client = TestClient(app)
+    token = system.create_access_token("viewer")
+
+    response = client.post("/admin/sms/run-reminders", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 403

@@ -1,8 +1,11 @@
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from routers.deps import require_admin
 from services.auth_service import employee_system
+from services.sms_service import SmsLogStore, load_sms_settings, run_due_reminders
 
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
@@ -65,3 +68,16 @@ def delete_employee(username: str):
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     return {"success": True}
+
+
+@router.post("/sms/run-reminders")
+def run_sms_reminders():
+    result = run_due_reminders([user.to_public_dict() for user in employee_system.get_all_employees()])
+    return {"success": True, "result": result}
+
+
+@router.get("/sms/logs")
+def list_sms_logs():
+    settings = load_sms_settings()
+    logs = SmsLogStore(Path(settings.log_file)).load()
+    return {"logs": logs[-200:]}
