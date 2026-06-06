@@ -1,1 +1,7 @@
 photo-backend/photos
+photo-backend/.thumbnails
+photo-backend/__pycache__/
+photo-backend/**/__pycache__/
+photo-backend/.pytest_cache/
+photo-monitor/dist/
+photo-monitor/node_modules/
