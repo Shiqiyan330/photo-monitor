@@ -21,7 +21,7 @@ class EmployeePayload(BaseModel):
 
 @router.get("/employees")
 def list_employees():
-    employees = [user.to_public_dict(include_sensitive=True) for user in employee_system.get_all_employees()]
+    employees = [user.to_public_dict() for user in employee_system.get_all_employees()]
     return {
         "employees": employees,
         "departments": employee_system.list_departments(),
@@ -33,7 +33,7 @@ def get_employee(username: str):
     user = employee_system.get_user(username)
     if not user or user.role != "employee":
         raise HTTPException(status_code=404, detail="员工不存在")
-    return {"employee": user.to_public_dict(include_sensitive=True)}
+    return {"employee": user.to_public_dict()}
 
 
 @router.post("/employees")
@@ -42,7 +42,7 @@ def create_employee(payload: EmployeePayload):
         employee = employee_system.create_employee(payload.model_dump())
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
-    return {"success": True, "employee": employee.to_public_dict(include_sensitive=True)}
+    return {"success": True, "employee": employee.to_public_dict()}
 
 
 @router.put("/employees/{username}")
@@ -51,7 +51,7 @@ def update_employee(username: str, payload: EmployeePayload):
         employee = employee_system.update_employee(username, payload.model_dump())
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
-    return {"success": True, "employee": employee.to_public_dict(include_sensitive=True)}
+    return {"success": True, "employee": employee.to_public_dict()}
 
 
 @router.delete("/employees/{username}")

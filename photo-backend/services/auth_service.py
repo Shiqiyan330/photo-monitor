@@ -1,6 +1,10 @@
 ﻿from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
+import os
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -21,11 +25,44 @@ MATRIX_PERMISSION_PREFIX = "perm:"
 ALL_DEPARTMENTS = "*"
 VALID_PERMISSION_SYSTEMS = {"photos", "company_files", "study_articles", "ledgers", "structure"}
 VALID_PERMISSION_ACTIONS = {"read", "create", "update", "delete"}
-JWT_SECRET = "photo-monitor-jwt-secret"
+JWT_SECRET = os.getenv("PHOTO_MONITOR_JWT_SECRET", "photo-monitor-dev-secret-change-me")
 JWT_ALGORITHM = "HS256"
 JWT_ISSUER = "photo-monitor"
 JWT_AUDIENCE = "photo-monitor-web"
 JWT_EXPIRE_DAYS = 7
+PASSWORD_HASH_PREFIX = "pbkdf2_sha256$"
+PASSWORD_ITERATIONS = 260000
+
+
+def hash_password(password: str) -> str:
+    salt = os.urandom(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, PASSWORD_ITERATIONS)
+    return "$".join(
+        [
+            PASSWORD_HASH_PREFIX.rstrip("$"),
+            str(PASSWORD_ITERATIONS),
+            base64.b64encode(salt).decode("ascii"),
+            base64.b64encode(digest).decode("ascii"),
+        ]
+    )
+
+
+def is_hashed_password(value: str) -> bool:
+    return isinstance(value, str) and value.startswith(PASSWORD_HASH_PREFIX)
+
+
+def verify_password(password: str, stored_password: str) -> bool:
+    if not is_hashed_password(stored_password):
+        return hmac.compare_digest(stored_password, password)
+
+    try:
+        _, iterations, salt_text, digest_text = stored_password.split("$", 3)
+        salt = base64.b64decode(salt_text.encode("ascii"))
+        expected = base64.b64decode(digest_text.encode("ascii"))
+        actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, int(iterations))
+    except (ValueError, TypeError):
+        return False
+    return hmac.compare_digest(actual, expected)
 
 
 def _normalize_department_name(value: str | None) -> str:
@@ -180,7 +217,7 @@ class User:
             self.join_date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     def check_password(self, password: str) -> bool:
-        return self.password == password
+        return verify_password(password, self.password)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -201,8 +238,6 @@ class User:
             "department_permissions": extract_permission_departments(self.permissions),
             "permission_matrix": self.permissions,
         }
-        if include_sensitive:
-            payload["password"] = self.password
         return payload
 
     @classmethod
@@ -259,6 +294,9 @@ class EmployeeSystem:
     def authenticate(self, username: str, password: str) -> User | None:
         for user in self.users:
             if user.username == username and user.check_password(password):
+                if not is_hashed_password(user.password):
+                    user.password = hash_password(password)
+                    self.save_data()
                 return user
         return None
 
@@ -294,7 +332,7 @@ class EmployeeSystem:
         department = (payload.get("department") or "").strip()
         user = User(
             username=username,
-            password=password,
+            password=hash_password(password),
             role="employee",
             phone=phone,
             name=(payload.get("name") or "").strip(),
@@ -328,7 +366,7 @@ class EmployeeSystem:
         password = (payload.get("password") or "").strip()
         if password:
             self._validate_password(password)
-            user.password = password
+            user.password = hash_password(password)
 
         self.save_data()
         return user
@@ -348,7 +386,7 @@ class EmployeeSystem:
         if not user.check_password(old_password):
             raise ValueError("原密码错误")
         self._validate_password(new_password)
-        user.password = new_password
+        user.password = hash_password(new_password)
         self.save_data()
 
     def admin_reset_password(self, username: str, new_password: str) -> None:
@@ -356,7 +394,7 @@ class EmployeeSystem:
         if not user:
             raise ValueError("用户不存在")
         self._validate_password(new_password)
-        user.password = new_password
+        user.password = hash_password(new_password)
         self.save_data()
 
     def _validate_password(self, password: str) -> None:

@@ -132,7 +132,7 @@ def test_department_accessible_departments_are_action_specific():
     assert get_accessible_departments(user, "company_files", "delete") == ["大茅山"]
 
 
-def test_employee_public_dict_only_includes_password_for_sensitive_admin_output(tmp_path):
+def test_employee_public_dict_never_includes_password(tmp_path):
     system = make_employee_system(tmp_path)
     user = system.create_employee(
         {
@@ -148,7 +148,7 @@ def test_employee_public_dict_only_includes_password_for_sensitive_admin_output(
     sensitive_payload = user.to_public_dict(include_sensitive=True)
 
     assert "password" not in public_payload
-    assert sensitive_payload["password"] == "secret123"
+    assert "password" not in sensitive_payload
 
 
 def test_structure_visibility_includes_own_department_and_children_only():
