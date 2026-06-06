@@ -16,6 +16,10 @@ class EmployeePayload(BaseModel):
     department: str = ""
     position: str = ""
     rank: str = ""
+    id_number: str = ""
+    birthday: str = ""
+    home_address: str = ""
+    certificates: list[dict] = Field(default_factory=list)
     permissions: list[str] = Field(default_factory=list)
 
 

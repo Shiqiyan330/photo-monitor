@@ -69,6 +69,46 @@ def _normalize_department_name(value: str | None) -> str:
     return (value or "").strip()
 
 
+def _normalize_text(value: str | None) -> str:
+    return (value or "").strip()
+
+
+def _validate_iso_date(value: str | None, label: str) -> str:
+    normalized = _normalize_text(value)
+    if not normalized:
+        return ""
+    try:
+        datetime.strptime(normalized, "%Y-%m-%d")
+    except ValueError as error:
+        raise ValueError(f"{label}格式必须为 YYYY-MM-DD") from error
+    return normalized
+
+
+def normalize_certificates(value: list[dict] | None) -> list[dict]:
+    certificates = []
+    for item in value or []:
+        if not isinstance(item, dict):
+            continue
+
+        name = _normalize_text(item.get("name"))
+        number = _normalize_text(item.get("number"))
+        expires_at = _validate_iso_date(item.get("expires_at"), "证书有效期")
+        note = _normalize_text(item.get("note"))
+        if not any([name, number, expires_at, note]):
+            continue
+        if not name and expires_at:
+            raise ValueError("证书名称不能为空")
+        certificates.append(
+            {
+                "name": name,
+                "number": number,
+                "expires_at": expires_at,
+                "note": note,
+            }
+        )
+    return certificates
+
+
 def build_department_permission(department: str) -> str:
     normalized = _normalize_department_name(department)
     return f"{DEPARTMENT_PERMISSION_PREFIX}{normalized}" if normalized else ""
@@ -214,6 +254,10 @@ class User:
     department: str = ""
     position: str = ""
     rank: str = ""
+    id_number: str = ""
+    birthday: str = ""
+    home_address: str = ""
+    certificates: list[dict] = field(default_factory=list)
     avatar: str = ""
     join_date: str = ""
     permissions: list[str] = field(default_factory=lambda: DEFAULT_PERMISSIONS.copy())
@@ -240,6 +284,10 @@ class User:
             "department": self.department,
             "position": self.position,
             "rank": self.rank,
+            "id_number": self.id_number,
+            "birthday": self.birthday,
+            "home_address": self.home_address,
+            "certificates": self.certificates,
             "avatar": self.avatar,
             "join_date": self.join_date,
             "permissions": self.permissions,
@@ -260,6 +308,10 @@ class User:
             department=data.get("department", ""),
             position=data.get("position", ""),
             rank=data.get("rank", ""),
+            id_number=_normalize_text(data.get("id_number", "")),
+            birthday=_validate_iso_date(data.get("birthday", ""), "生日"),
+            home_address=_normalize_text(data.get("home_address", "")),
+            certificates=normalize_certificates(data.get("certificates", [])),
             avatar=data.get("avatar", ""),
             join_date=data.get("join_date", ""),
             permissions=EmployeeSystem.normalize_permissions(
@@ -347,6 +399,10 @@ class EmployeeSystem:
             department=department,
             position=(payload.get("position") or "").strip(),
             rank=(payload.get("rank") or "").strip(),
+            id_number=_normalize_text(payload.get("id_number")),
+            birthday=_validate_iso_date(payload.get("birthday"), "生日"),
+            home_address=_normalize_text(payload.get("home_address")),
+            certificates=normalize_certificates(payload.get("certificates")),
             avatar="👤",
             permissions=self._normalize_permissions(payload.get("permissions"), department),
         )
@@ -369,6 +425,10 @@ class EmployeeSystem:
         user.department = (payload.get("department", user.department) or "").strip()
         user.position = (payload.get("position", user.position) or "").strip()
         user.rank = (payload.get("rank", user.rank) or "").strip()
+        user.id_number = _normalize_text(payload.get("id_number", user.id_number))
+        user.birthday = _validate_iso_date(payload.get("birthday", user.birthday), "生日")
+        user.home_address = _normalize_text(payload.get("home_address", user.home_address))
+        user.certificates = normalize_certificates(payload.get("certificates", user.certificates))
         user.permissions = self._normalize_permissions(payload.get("permissions", user.permissions), user.department)
 
         password = (payload.get("password") or "").strip()
