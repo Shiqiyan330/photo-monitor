@@ -1,8 +1,15 @@
 from pathlib import Path
+from datetime import date
 
 import pytest
 
 from services.auth_service import EmployeeSystem
+from services.sms_service import (
+    SmsSettings,
+    build_due_reminders,
+    parse_birthday_from_id_number,
+    resolve_employee_birthday,
+)
 
 
 def make_employee_system(tmp_path: Path) -> EmployeeSystem:
@@ -98,3 +105,42 @@ def test_invalid_employee_dates_are_rejected(tmp_path):
                 "permissions": [],
             }
         )
+
+
+def test_birthday_resolver_prefers_manual_birthday():
+    employee = {"birthday": "1991-02-03", "id_number": "330106199001012345"}
+
+    assert resolve_employee_birthday(employee) == "1991-02-03"
+
+
+def test_birthday_resolver_falls_back_to_id_number():
+    employee = {"birthday": "", "id_number": "330106199001012345"}
+
+    assert parse_birthday_from_id_number(employee["id_number"]) == "1990-01-01"
+    assert resolve_employee_birthday(employee) == "1990-01-01"
+
+
+def test_build_due_reminders_includes_birthday_and_certificate():
+    settings = SmsSettings(enabled=False, cert_remind_days_before=90)
+    employees = [
+        {
+            "username": "worker",
+            "name": "员工甲",
+            "phone": "13800000000",
+            "birthday": "1990-06-06",
+            "id_number": "",
+            "certificates": [
+                {"name": "特种设备作业证", "expires_at": "2026-09-04", "number": "", "note": ""}
+            ],
+        }
+    ]
+
+    reminders = build_due_reminders(employees, today=date(2026, 6, 6), settings=settings)
+
+    assert [item["type"] for item in reminders] == ["birthday", "certificate"]
+    assert reminders[0]["template_params"] == {"name": "员工甲"}
+    assert reminders[1]["template_params"] == {
+        "name": "员工甲",
+        "certName": "特种设备作业证",
+        "dueDate": "2026-09-04",
+    }
