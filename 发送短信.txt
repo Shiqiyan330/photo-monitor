@@ -1,0 +1,146 @@
+概述
+文档中 SDK 关于 API 的示例代码仅供参考，各 API 的完整使用步骤与说明请参见SDK 示例 和 OpenAPI 文档。
+PyPI version
+
+环境要求
+Python >= 3.7
+发布地址
+https://pypi.org/project/alibabacloud_dysmsapi20170525/4.5.1
+源码仓库地址
+https://github.com/aliyun/alibabacloud-python-sdk/tree/master/dysmsapi-20170525
+安装方式
+PyPI PIP
+pip install alibabacloud_dysmsapi20170525==4.5.1
+示例背景
+以下代码详细介绍了阿里云 V2 Python SDK 的使用步骤，仅作步骤示范。示例展示了如何调用 SendSms API 进行发送短信请求。
+完整代码示例
+以下为基于 Python SDK 提供的示例代码。
+
+# -*- coding: utf-8 -*-
+# This file is auto-generated, don't edit it. Thanks.
+import os
+import sys
+import json
+
+from typing import List
+
+from alibabacloud_dysmsapi20170525.client import Client as Dysmsapi20170525Client
+from alibabacloud_credentials.client import Client as CredentialClient
+from alibabacloud_tea_openapi import models as open_api_models
+from alibabacloud_dysmsapi20170525 import models as dysmsapi_20170525_models
+from alibabacloud_tea_util import models as util_models
+from alibabacloud_tea_util.client import Client as UtilClient
+
+
+class Sample:
+    def __init__(self):
+        pass
+
+    @staticmethod
+    def create_client() -> Dysmsapi20170525Client:
+        """
+        使用凭据初始化账号 Client
+        @return: Client
+        @throws Exception
+        """
+        # 工程代码建议使用更安全的无 AK 方式，凭据配置方式请参见：https://help.aliyun.com/document_detail/378659.html。
+        credential = CredentialClient()
+        config = open_api_models.Config(
+            credential=credential
+        )
+        # Endpoint 请参考 https://api.aliyun.com/product/Dysmsapi
+        config.endpoint = f'dysmsapi.aliyuncs.com'
+        return Dysmsapi20170525Client(config)
+
+    @staticmethod
+    def main(
+        args: List[str],
+    ) -> None:
+        client = Sample.create_client()
+        send_sms_request = dysmsapi_20170525_models.SendSmsRequest(
+            phone_numbers='your_value',
+            sign_name='your_value'
+        )
+        try:
+            resp = client.send_sms_with_options(send_sms_request, util_models.RuntimeOptions())
+            print(json.dumps(resp, default=str, indent=2))
+        except Exception as error:
+            # 此处仅做打印展示，请谨慎对待异常处理，在工程项目中切勿直接忽略异常。
+            # 错误 message
+            print(error.message)
+            # 诊断地址
+            print(error.data.get("Recommend"))
+
+    @staticmethod
+    async def main_async(
+        args: List[str],
+    ) -> None:
+        client = Sample.create_client()
+        send_sms_request = dysmsapi_20170525_models.SendSmsRequest(
+            phone_numbers='your_value',
+            sign_name='your_value'
+        )
+        try:
+            resp = await client.send_sms_with_options_async(send_sms_request, util_models.RuntimeOptions())
+            print(json.dumps(resp, default=str, indent=2))
+        except Exception as error:
+            # 此处仅做打印展示，请谨慎对待异常处理，在工程项目中切勿直接忽略异常。
+            # 错误 message
+            print(error.message)
+            # 诊断地址
+            print(error.data.get("Recommend"))
+
+
+if __name__ == '__main__':
+    Sample.main(sys.argv[1:])
+
+步骤介绍
+初始化配置对象 alibabacloud_tea_openapi.Config。 Config 对象存放 credential、endpoint 等配置，endpoint 如示例中的 dysmsapi.aliyuncs.com 。
+
+注意：工程代码建议使用更安全的无 AK 方式
+
+先实例化 alibabacloud_credentials.client 对象，设置到 Config 中的 credential 字段，阿里云 SDK 将会尝试按照默认凭据链的顺序查找相关凭据信息。
+
+更多凭据配置方式请参阅：管理访问凭据
+
+import os
+from alibabacloud_tea_openapi import models as open_api_models
+from alibabacloud_credentials.client import Client as CredentialClient
+credential = CredentialClient()
+config = open_api_models.Config(
+    credential=credential
+)
+# 访问的域名
+config.endpoint = 'dysmsapi.aliyuncs.com'
+实例化一个客户端，从 alibabacloud_dysmsapi20170525.Client 类生成对象 client。 后续 request、response 从 alibabacloud_dysmsapi20170525.models 中获得。
+
+from alibabacloud_dysmsapi20170525.client import Client as Client
+from alibabacloud_dysmsapi20170525 import models as models
+
+client = Client(config)
+创建对应 API 的 Request 。 方法的命名规则为 API 名称加上 Request 。例如：
+
+request = models.SendSmsRequest()
+设置请求类 request 的参数。 通过设置 request 类的属性设置参数，即 API 中必须要提供的信息。例如：
+
+
+# 该参数值为假设值，请您根据实际情况进行填写
+request.phoneNumbers = "your_value";
+
+# 该参数值为假设值，请您根据实际情况进行填写
+request.signName = "your_value";
+
+通过 client 对象获得对应 request 响应 response 。
+
+response = client.send_sms(request)
+print(response)
+调用 response 中对应的属性获得返回的参数值。 假设您需要获取 request_id ：
+
+request_id = response.body.request_id
+print(request_id)
+使用 try...except... 处理报错。
+
+try:
+    response = client.send_sms(request)
+except Exception as e:
+    print(e)
