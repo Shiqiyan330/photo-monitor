@@ -1,5 +1,5 @@
 import { useEffect } from "react"
-import { getAssetUrl } from "../api"
+import { getAssetUrl, getAuthorizedUrl } from "../api"
 
 function formatPhotoTime(photo) {
   if (photo.actual_time_text) {
@@ -40,7 +40,7 @@ export default function PhotoModal({ photo, onClose }) {
           关闭
         </button>
 
-        <img src={getAssetUrl(photo.url)} alt={photo.name} className="modal-image" />
+        <img src={getAuthorizedUrl(getAssetUrl(photo.url))} alt={photo.name} className="modal-image" />
 
         <div className="modal-caption">
           <div>{photo.name}</div>

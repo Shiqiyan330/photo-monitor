@@ -78,7 +78,7 @@ def _collect_photos_from_folder(base: Path, folder: Path, department: str = "") 
         photos.append(
             {
                 "name": file.name,
-                "url": f"/static/{rel_path.as_posix()}",
+                "url": f"/photos/resource/{rel_path.as_posix()}",
                 "thumbnail_url": f"/thumbnails/{rel_path.as_posix()}",
                 "time": actual_time,
                 "actual_time": actual_time,

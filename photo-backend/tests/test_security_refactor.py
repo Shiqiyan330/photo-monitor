@@ -77,3 +77,65 @@ def test_jwt_uses_configured_environment_secret(tmp_path, monkeypatch):
         audience=auth_service.JWT_AUDIENCE,
     )
     assert decoded["sub"] == "admin"
+
+
+def test_photo_resource_requires_matching_read_permission(tmp_path, monkeypatch):
+    from routers import photo
+
+    base = tmp_path / "photos"
+    target = base / "ops" / "xiazhan" / "2026_06_06-2026_06_06" / "camera_20260606120000_001.jpg"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"not-a-real-image-but-downloadable")
+    monkeypatch.setattr(photo, "BASE", base)
+
+    system = make_employee_system(tmp_path)
+    system.create_employee(
+        {
+            "username": "viewer",
+            "password": "viewer123",
+            "department": "ops",
+            "permissions": [build_matrix_permission("photos", "ops", "read")],
+        }
+    )
+    patch_employee_system(monkeypatch, system)
+    token = system.create_access_token("viewer")
+
+    client = TestClient(app)
+    unauthenticated = client.get("/photos/resource/ops/xiazhan/2026_06_06-2026_06_06/camera_20260606120000_001.jpg")
+    allowed = client.get(
+        "/photos/resource/ops/xiazhan/2026_06_06-2026_06_06/camera_20260606120000_001.jpg",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert unauthenticated.status_code == 401
+    assert allowed.status_code == 200
+
+
+def test_upload_file_access_respects_department_and_action_permissions(tmp_path):
+    from tempfile import SpooledTemporaryFile
+
+    import pytest
+    from fastapi import HTTPException, UploadFile
+    from starlette.datastructures import Headers
+
+    from services.upload_service import delete_data_upload, save_data_upload_file
+
+    base = tmp_path / "office"
+    user = {
+        "role": "employee",
+        "username": "uploader",
+        "department": "ops",
+        "permissions": [
+            build_matrix_permission("company_files", "ops", "create"),
+            build_matrix_permission("company_files", "ops", "read"),
+        ],
+    }
+    file_obj = SpooledTemporaryFile()
+    file_obj.write(b"hello")
+    file_obj.seek(0)
+    upload = UploadFile(filename="note.txt", file=file_obj, headers=Headers({"content-type": "text/plain"}))
+
+    item = save_data_upload_file(base, "company_files", upload, "ops", user)
+
+    with pytest.raises(HTTPException):
+        delete_data_upload(base, "company_files", item["id"], user)

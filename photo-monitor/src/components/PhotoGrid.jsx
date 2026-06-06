@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef } from "react"
-import { getAssetUrl } from "../api"
+import { getAssetUrl, getAuthorizedUrl } from "../api"
 
 function formatPhotoTime(photo) {
   if (photo.actual_time_text) {
@@ -75,7 +75,7 @@ function PhotoGrid({
               aria-label={`查看照片：${photo.name}`}
             >
               <img
-                src={getAssetUrl(photo.thumbnail_url ?? photo.url)}
+                src={getAuthorizedUrl(getAssetUrl(photo.thumbnail_url ?? photo.url))}
                 alt={photo.name}
                 className="photo-thumb"
                 loading="lazy"

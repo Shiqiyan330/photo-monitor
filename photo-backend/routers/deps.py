@@ -3,7 +3,7 @@
 from services.auth_service import has_matrix_permission, employee_system, user_has_any_matrix_permission
 
 
-def _extract_bearer_token(authorization: str | None) -> str | None:
+def extract_bearer_token(authorization: str | None) -> str | None:
     if not authorization:
         return None
     scheme, _, token = authorization.partition(" ")
@@ -12,18 +12,26 @@ def _extract_bearer_token(authorization: str | None) -> str | None:
     return token.strip()
 
 
-def require_login(authorization: str | None = Header(default=None)) -> dict:
-    token = _extract_bearer_token(authorization)
+def get_user_from_token(token: str | None) -> dict | None:
     user = employee_system.get_user_by_token(token)
+    return user.to_public_dict() if user else None
+
+
+def require_matrix_action(user: dict, system: str, actions: set[str], detail: str) -> dict:
+    if user["role"] != "admin" and not user_has_any_matrix_permission(user, system, actions):
+        raise HTTPException(status_code=403, detail=detail)
+    return user
+
+
+def require_login(authorization: str | None = Header(default=None)) -> dict:
+    user = get_user_from_token(extract_bearer_token(authorization))
     if not user:
         raise HTTPException(status_code=401, detail="请先登录")
-    return user.to_public_dict()
+    return user
 
 
 def require_camera_access(user: dict = Depends(require_login)) -> dict:
-    if user["role"] != "admin" and not _has_any_matrix_permission(user, "photos", {"read"}):
-        raise HTTPException(status_code=403, detail="当前账号没有监控照片权限")
-    return user
+    return require_matrix_action(user, "photos", {"read"}, "当前账号没有监控照片权限")
 
 
 def _has_any_matrix_permission(user: dict, system: str, actions: set[str]) -> bool:

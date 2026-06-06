@@ -1,10 +1,10 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import FileResponse
 from PIL import Image
 
-from routers.deps import require_camera_access
+from routers.deps import extract_bearer_token, get_user_from_token, require_camera_access
 from services.auth_service import ALL_DEPARTMENTS, extract_matrix_departments
 from services.photo_service import IMG_EXTS, get_all_photos
 
@@ -30,6 +30,32 @@ def _get_accessible_departments(user: dict) -> list[str]:
         departments.append(user["department"])
 
     return list(dict.fromkeys([item.strip() for item in departments if item and item.strip()]))
+
+
+def _require_photo_resource_user(
+    token: str | None = Query(default=None),
+    authorization: str | None = Header(default=None),
+) -> dict:
+    user = get_user_from_token(token) or get_user_from_token(extract_bearer_token(authorization))
+    if not user:
+        raise HTTPException(status_code=401, detail="请先登录")
+    return require_camera_access(user)
+
+
+def _resolve_allowed_photo(file_path: str, user: dict) -> Path:
+    source = (BASE / file_path).resolve()
+    base = BASE.resolve()
+
+    if base not in source.parents or source.suffix.lower() not in IMG_EXTS or not source.is_file():
+        raise HTTPException(status_code=404, detail="Photo not found")
+
+    relative_path = source.relative_to(base)
+    department = relative_path.parts[0] if len(relative_path.parts) > 2 else ""
+    accessible_departments = _get_accessible_departments(user)
+    if department and user["role"] != "admin" and department not in accessible_departments:
+        raise HTTPException(status_code=403, detail="No permission to view this department")
+
+    return source
 
 
 @router.get("/photos")
@@ -71,13 +97,15 @@ def get_photos(
     }
 
 
-@router.get("/thumbnails/{file_path:path}")
-def get_thumbnail(file_path: str):
-    source = (BASE / file_path).resolve()
-    base = BASE.resolve()
+@router.get("/photos/resource/{file_path:path}")
+def get_photo_resource(file_path: str, user=Depends(_require_photo_resource_user)):
+    return FileResponse(_resolve_allowed_photo(file_path, user))
 
-    if base not in source.parents or source.suffix.lower() not in IMG_EXTS or not source.is_file():
-        raise HTTPException(status_code=404, detail="Photo not found")
+
+@router.get("/thumbnails/{file_path:path}")
+def get_thumbnail(file_path: str, user=Depends(_require_photo_resource_user)):
+    source = _resolve_allowed_photo(file_path, user)
+    base = BASE.resolve()
 
     relative_path = source.relative_to(base)
     target = (THUMB_BASE / relative_path).with_suffix(".jpg")

@@ -37,6 +37,5 @@ def run_watch():
 threading.Thread(target=run_watch, daemon=True).start()
 start_photo_cleanup_scheduler(BASE_DIR)
 
-app.mount("/static", StaticFiles(directory=BASE_DIR), name="static")
 OFFICE_DATA_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/office-data", StaticFiles(directory=OFFICE_DATA_DIR), name="office-data")
