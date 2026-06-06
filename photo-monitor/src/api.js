@@ -131,6 +131,13 @@ export function changePassword(oldPassword, newPassword) {
   })
 }
 
+export function updateProfile(payload) {
+  return request("/auth/profile", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  })
+}
+
 export function fetchPhotos(station, department = "", options = {}) {
   const params = new URLSearchParams({ station })
   if (department) {

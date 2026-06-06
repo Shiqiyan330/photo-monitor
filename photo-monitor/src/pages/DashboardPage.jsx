@@ -12,7 +12,15 @@ export function BrandMark({ compact = false }) {
   )
 }
 
-export default function DashboardPage({ user, modules, onOpenModule, onOpenEmployees, onOpenPassword, onLogout }) {
+export default function DashboardPage({
+  user,
+  modules,
+  onOpenModule,
+  onOpenEmployees,
+  onOpenPassword,
+  onOpenProfile,
+  onLogout,
+}) {
   return (
     <div className="dashboard-shell">
       <section className="dashboard-hero">
@@ -20,7 +28,9 @@ export default function DashboardPage({ user, modules, onOpenModule, onOpenEmplo
           <BrandMark />
           <p className="eyebrow">Main Dashboard</p>
           <h1>监控照片管理系统</h1>
-          <p className="hero-copy">根据账号权限展示可用功能，进入对应模块处理监控、文档、学习、台账和组织信息。</p>
+          <p className="hero-copy">
+            根据账号权限展示可用功能，进入对应模块处理监控、文档、学习、台账和组织信息。
+          </p>
         </div>
 
         <div className="user-panel">
@@ -32,6 +42,9 @@ export default function DashboardPage({ user, modules, onOpenModule, onOpenEmplo
           <div className="user-actions">
             <button type="button" className="ghost-button" onClick={onOpenPassword}>
               修改密码
+            </button>
+            <button type="button" className="ghost-button" onClick={onOpenProfile}>
+              个人信息
             </button>
             {user.role === "admin" ? (
               <button type="button" className="ghost-button" onClick={onOpenEmployees}>
@@ -71,4 +84,3 @@ export default function DashboardPage({ user, modules, onOpenModule, onOpenEmplo
     </div>
   )
 }
-

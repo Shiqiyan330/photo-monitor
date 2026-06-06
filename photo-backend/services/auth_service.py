@@ -439,6 +439,21 @@ class EmployeeSystem:
         self.save_data()
         return user
 
+    def update_user_profile(self, username: str, payload: dict) -> User:
+        user = self.get_user(username)
+        if not user:
+            raise ValueError("用户不存在")
+
+        user.phone = _normalize_text(payload.get("phone", user.phone))
+        user.name = _normalize_text(payload.get("name", user.name))
+        user.id_number = _normalize_text(payload.get("id_number", user.id_number))
+        user.birthday = _validate_iso_date(payload.get("birthday", user.birthday), "生日")
+        user.home_address = _normalize_text(payload.get("home_address", user.home_address))
+        user.certificates = normalize_certificates(payload.get("certificates", user.certificates))
+
+        self.save_data()
+        return user
+
     def delete_employee(self, username: str) -> None:
         for index, user in enumerate(self.users):
             if user.username == username and user.role == "employee":

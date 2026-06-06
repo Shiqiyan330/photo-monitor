@@ -21,6 +21,7 @@ import {
 import ChangePasswordModal from "./components/ChangePasswordModal"
 import EmployeeManagerPage from "./components/EmployeeManagerPage"
 import LoginForm from "./components/LoginForm"
+import ProfileModal from "./components/ProfileModal"
 import useAuth from "./hooks/useAuth"
 import usePhotoFeed, { DEFAULT_STATION, keepDigitsOnly } from "./hooks/usePhotoFeed"
 import DashboardPage from "./pages/DashboardPage"
@@ -168,6 +169,7 @@ function App() {
   const [departments, setDepartments] = useState([])
   const [currentPage, setCurrentPage] = useState(readCurrentPage)
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
+  const [profileModalOpen, setProfileModalOpen] = useState(false)
   const [bannerMessage, setBannerMessage] = useState("")
   const [structureStatus, setStructureStatus] = useState("idle")
   const [structureError, setStructureError] = useState("")
@@ -187,8 +189,10 @@ function App() {
     handleLogin: loginUser,
     handleLogout: logoutUser,
     handleChangePassword,
+    handleUpdateProfile,
   } = useAuth({
     onPasswordChanged: () => showBanner("密码修改成功"),
+    onProfileUpdated: () => showBanner("个人信息已更新"),
   })
 
   const hasPhotoAccess = useMemo(() => hasCameraPermission(user), [user])
@@ -308,6 +312,7 @@ function App() {
     await logoutUser()
     resetPhotoState()
     setPasswordModalOpen(false)
+    setProfileModalOpen(false)
     setCurrentPage(PAGE_DASHBOARD)
     setRoute(PAGE_DASHBOARD)
   }
@@ -345,6 +350,14 @@ function App() {
     setRoute(page)
   }
 
+  const profileModal = profileModalOpen ? (
+    <ProfileModal
+      user={user}
+      onClose={() => setProfileModalOpen(false)}
+      onSubmit={handleUpdateProfile}
+    />
+  ) : null
+
   if (booting) {
     return (
       <div className="app-shell">
@@ -372,6 +385,7 @@ function App() {
           onOpenModule={openModulePage}
           onOpenEmployees={openEmployeePage}
           onOpenPassword={() => setPasswordModalOpen(true)}
+          onOpenProfile={() => setProfileModalOpen(true)}
           onLogout={handleLogout}
         />
 
@@ -381,6 +395,7 @@ function App() {
             onSubmit={handleChangePassword}
           />
         ) : null}
+        {profileModal}
       </div>
     )
   }
@@ -405,6 +420,7 @@ function App() {
             onSubmit={handleChangePassword}
           />
         ) : null}
+        {profileModal}
       </div>
     )
   }

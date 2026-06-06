@@ -6,9 +6,10 @@ import {
   login,
   logout,
   setStoredToken,
+  updateProfile,
 } from "../api"
 
-export default function useAuth({ onLoginSuccess, onLogoutSuccess, onPasswordChanged } = {}) {
+export default function useAuth({ onLoginSuccess, onLogoutSuccess, onPasswordChanged, onProfileUpdated } = {}) {
   const [user, setUser] = useState(null)
   const [booting, setBooting] = useState(true)
   const [authError, setAuthError] = useState("")
@@ -61,6 +62,21 @@ export default function useAuth({ onLoginSuccess, onLogoutSuccess, onPasswordCha
     return result
   }, [onPasswordChanged])
 
-  return { user, setUser, booting, authError, handleLogin, handleLogout, handleChangePassword }
-}
+  const handleUpdateProfile = useCallback(async (payload) => {
+    const result = await updateProfile(payload)
+    setUser(result.user)
+    onProfileUpdated?.(result.user)
+    return result
+  }, [onProfileUpdated])
 
+  return {
+    user,
+    setUser,
+    booting,
+    authError,
+    handleLogin,
+    handleLogout,
+    handleChangePassword,
+    handleUpdateProfile,
+  }
+}

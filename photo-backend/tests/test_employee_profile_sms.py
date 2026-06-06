@@ -85,6 +85,44 @@ def test_employee_profile_defaults_for_existing_records(tmp_path):
     assert public["certificates"] == []
 
 
+def test_user_profile_update_only_changes_personal_fields(tmp_path):
+    system = make_employee_system(tmp_path)
+    system.create_employee(
+        {
+            "username": "self",
+            "password": "self",
+            "phone": "100",
+            "name": "Old Name",
+            "department": "HQ",
+            "permissions": ["perm:structure:HQ:read"],
+        }
+    )
+
+    updated = system.update_user_profile(
+        "self",
+        {
+            "phone": "101",
+            "name": "New Name",
+            "id_number": "330106199001012345",
+            "birthday": "1990-01-02",
+            "home_address": "New Address",
+            "certificates": [{"name": "Cert", "number": "C-1", "expires_at": "2026-09-01"}],
+            "department": "Other",
+            "permissions": ["perm:structure:*:read"],
+        },
+    )
+
+    public = updated.to_public_dict()
+    assert public["phone"] == "101"
+    assert public["name"] == "New Name"
+    assert public["id_number"] == "330106199001012345"
+    assert public["birthday"] == "1990-01-02"
+    assert public["home_address"] == "New Address"
+    assert public["certificates"][0]["name"] == "Cert"
+    assert public["department"] == "HQ"
+    assert public["permissions"] == ["perm:structure:HQ:read"]
+
+
 def test_invalid_employee_dates_are_rejected(tmp_path):
     system = make_employee_system(tmp_path)
 

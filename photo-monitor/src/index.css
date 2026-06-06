@@ -605,6 +605,19 @@ h4 {
   width: min(560px, 100%);
 }
 
+.profile-modal {
+  width: min(720px, 100%);
+}
+
+.profile-modal .certificate-row {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.profile-modal .certificate-row .danger-button {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
 .wide-modal {
   width: min(1200px, calc(100vw - 24px));
 }
@@ -1860,6 +1873,7 @@ h4 {
 
   .employee-filter-bar,
   .form-grid,
+  .profile-modal .certificate-row,
   .certificate-row {
     grid-template-columns: 1fr;
   }

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from routers.deps import require_login
 from services.auth_service import employee_system
@@ -16,6 +16,15 @@ class LoginPayload(BaseModel):
 class ChangePasswordPayload(BaseModel):
     old_password: str
     new_password: str
+
+
+class ProfilePayload(BaseModel):
+    phone: str = ""
+    name: str = ""
+    id_number: str = ""
+    birthday: str = ""
+    home_address: str = ""
+    certificates: list[dict] = Field(default_factory=list)
 
 
 @router.post("/login")
@@ -40,6 +49,15 @@ def change_password(payload: ChangePasswordPayload, user: dict = Depends(require
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
     fresh_user = employee_system.get_user(user["username"])
+    return {"success": True, "user": fresh_user.to_public_dict()}
+
+
+@router.put("/profile")
+def update_profile(payload: ProfilePayload, user: dict = Depends(require_login)):
+    try:
+        fresh_user = employee_system.update_user_profile(user["username"], payload.model_dump())
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
     return {"success": True, "user": fresh_user.to_public_dict()}
 
 
