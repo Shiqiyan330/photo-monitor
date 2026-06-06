@@ -60,23 +60,6 @@ function isConcreteMatrixPermission(permission) {
   return Boolean(parsed && parsed.department !== "*")
 }
 
-function syncDefaultStructurePermission(permissions, department) {
-  const normalizedDepartment = (department || "").trim()
-  const nonStructurePermissions = permissions.filter((permission) => {
-    const parsed = parseMatrixPermission(permission)
-    return !parsed || parsed.system !== "structure"
-  })
-
-  if (!normalizedDepartment) {
-    return nonStructurePermissions
-  }
-
-  return [
-    ...nonStructurePermissions,
-    buildMatrixPermission("structure", normalizedDepartment, "read"),
-  ]
-}
-
 function summarizePermissions(employee) {
   const grouped = new Map()
 
