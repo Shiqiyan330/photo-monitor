@@ -1,6 +1,5 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
-  changePassword,
   createEmployee,
   deleteCompanyFile,
   deleteEmployee,
@@ -9,17 +8,10 @@ import {
   downloadFile,
   getAssetUrl,
   fetchLedgers,
-  fetchCurrentUser,
   fetchEmployees,
-  fetchPhotos,
   fetchStructureEmployees,
   fetchStudyArticles,
   fetchUploadedFiles,
-  getStoredToken,
-  getWebSocketUrl,
-  login,
-  logout,
-  setStoredToken,
   updateEmployee,
   uploadCompanyFile,
   uploadLedger,
@@ -34,16 +26,19 @@ import LoginForm from "./components/LoginForm"
 import PhotoGrid from "./components/PhotoGrid"
 import PhotoModal from "./components/PhotoModal"
 import Toolbar from "./components/Toolbar"
+import useAuth from "./hooks/useAuth"
+import usePhotoFeed, { DEFAULT_STATION, keepDigitsOnly } from "./hooks/usePhotoFeed"
+import {
+  getDepartmentViewOptions,
+  getStructureVisibleDepartments,
+  hasAnyMatrixAction,
+  hasCameraPermission,
+  hasMatrixPermission,
+  hasMatrixReadPermission,
+  hasModuleAccess,
+  uniqueStrings,
+} from "./permissions"
 
-const DEFAULT_STATION = "xiazhan"
-const DEFAULT_PHOTO_LIMIT = ""
-const DEFAULT_DEDUPE_ENABLED = true
-const DEFAULT_DEDUPE_WINDOW_SECONDS = "10"
-const PHOTO_FEED_BATCH_SIZE = 24
-const MOBILE_PHOTO_FEED_BATCH_SIZE = 4
-const PHOTO_LIMIT_STORAGE_KEY = "photo_monitor_photo_limit"
-const PHOTO_DEDUPE_ENABLED_STORAGE_KEY = "photo_monitor_dedupe_enabled"
-const PHOTO_DEDUPE_WINDOW_STORAGE_KEY = "photo_monitor_dedupe_window"
 const PAGE_DASHBOARD = "dashboard"
 const PAGE_EMPLOYEES = "employees"
 const PAGE_MONITOR = "monitor"
@@ -94,202 +89,6 @@ const MODULES = [
     icon: "account_tree",
   },
 ]
-
-function keepDigitsOnly(value) {
-  return value.replace(/\D/g, "")
-}
-
-function parsePositiveInteger(value) {
-  if (!value) {
-    return null
-  }
-
-  const parsed = Number.parseInt(value, 10)
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return null
-  }
-
-  return parsed
-}
-
-function readStoredDigits(key, fallback) {
-  const saved = window.localStorage.getItem(key)
-  if (!saved) {
-    return fallback
-  }
-
-  const normalized = keepDigitsOnly(saved)
-  return normalized || fallback
-}
-
-function readInitialPhotoLimit() {
-  return readStoredDigits(PHOTO_LIMIT_STORAGE_KEY, DEFAULT_PHOTO_LIMIT)
-}
-
-function readInitialDedupeEnabled() {
-  const saved = window.localStorage.getItem(PHOTO_DEDUPE_ENABLED_STORAGE_KEY)
-  if (saved == null) {
-    return DEFAULT_DEDUPE_ENABLED
-  }
-  return saved === "true"
-}
-
-function readInitialDedupeWindow() {
-  return readStoredDigits(PHOTO_DEDUPE_WINDOW_STORAGE_KEY, DEFAULT_DEDUPE_WINDOW_SECONDS)
-}
-
-function getPhotoFeedBatchSize() {
-  return window.matchMedia("(max-width: 640px)").matches
-    ? MOBILE_PHOTO_FEED_BATCH_SIZE
-    : PHOTO_FEED_BATCH_SIZE
-}
-
-function dedupePhotosByWindow(photos, windowSeconds) {
-  if (!windowSeconds || photos.length <= 1) {
-    return photos
-  }
-
-  const deduped = []
-  let lastPhotoTime = null
-
-  for (const photo of photos) {
-    const photoTime = photo.actual_time ?? photo.time
-    if (lastPhotoTime == null || Math.abs(lastPhotoTime - photoTime) > windowSeconds) {
-      deduped.push(photo)
-    }
-
-    lastPhotoTime = photoTime
-  }
-
-  return deduped
-}
-
-function uniqueStrings(values) {
-  return Array.from(new Set(values.map((item) => (item || "").trim()).filter(Boolean)))
-}
-
-function parseMatrixPermission(permission) {
-  if (typeof permission !== "string" || !permission.startsWith("perm:")) {
-    return null
-  }
-  const parts = permission.slice(5).split(":")
-  if (parts.length !== 3 || parts.some((item) => !item)) {
-    return null
-  }
-  return { system: parts[0], department: parts[1], action: parts[2] }
-}
-
-function hasMatrixPermission(user, system, action, department = "") {
-  if (!user) {
-    return false
-  }
-  if (user.role === "admin") {
-    return true
-  }
-  const targetDepartment = department || "*"
-  return (user.permissions ?? []).some((permission) => {
-    const parsed = parseMatrixPermission(permission)
-    if (!parsed || parsed.system !== system || parsed.action !== action) {
-      return false
-    }
-    return parsed.department === "*" || parsed.department === targetDepartment
-  })
-}
-
-function hasAnyMatrixAction(user, system, actions) {
-  if (!user) {
-    return false
-  }
-  if (user.role === "admin") {
-    return true
-  }
-  return (user.permissions ?? []).some((permission) => {
-    const parsed = parseMatrixPermission(permission)
-    return parsed && parsed.system === system && actions.includes(parsed.action)
-  })
-}
-
-function getMatrixDepartments(user, system, action) {
-  if (!user) {
-    return []
-  }
-  if (user.role === "admin") {
-    return []
-  }
-  const departments = []
-  for (const permission of user.permissions ?? []) {
-    const parsed = parseMatrixPermission(permission)
-    if (!parsed) {
-      continue
-    }
-    if (system && parsed.system !== system) {
-      continue
-    }
-    if (action && parsed.action !== action) {
-      continue
-    }
-    departments.push(parsed.department)
-  }
-  if (departments.includes("*")) {
-    return []
-  }
-  return uniqueStrings(departments)
-}
-
-function isSameOrChildDepartment(department, parent) {
-  const normalizedDepartment = (department || "").trim()
-  const normalizedParent = (parent || "").trim()
-  return (
-    Boolean(normalizedDepartment && normalizedParent) &&
-    (normalizedDepartment === normalizedParent || normalizedDepartment.startsWith(`${normalizedParent}/`))
-  )
-}
-
-function getStructureVisibleDepartments(user, departments) {
-  const normalizedDepartments = uniqueStrings(departments)
-  if (!user) {
-    return []
-  }
-  if (user.role === "admin") {
-    return normalizedDepartments
-  }
-
-  const allowedDepartments = getMatrixDepartments(user, "structure", "read")
-  const scopedDepartments = allowedDepartments.length ? allowedDepartments : uniqueStrings([user.department])
-  return normalizedDepartments.filter((department) =>
-    scopedDepartments.some((allowed) => isSameOrChildDepartment(department, allowed)),
-  )
-}
-
-function getDepartmentViewOptions(user, departments, system = null, action = "read") {
-  if (!user) {
-    return []
-  }
-
-  if (user.role === "admin") {
-    return uniqueStrings(departments)
-  }
-
-  const matrixDepartments = getMatrixDepartments(user, system, action)
-  const departmentOptions = matrixDepartments.length
-    ? matrixDepartments
-    : uniqueStrings([...(departments ?? []), ...(user.department_permissions ?? []), user.department ?? ""])
-
-  return departmentOptions.length > 1 ? ["", ...departmentOptions] : departmentOptions
-}
-
-function hasCameraPermission(user) {
-  return hasMatrixReadPermission(user, "photos")
-}
-
-function hasMatrixReadPermission(user, system) {
-  return hasAnyMatrixAction(user, system, ["read"])
-}
-
-function hasModuleAccess(user, module) {
-  const actions = module.key === PAGE_STRUCTURE ? ["read"] : ["read", "create", "update", "delete"]
-  return hasAnyMatrixAction(user, module.matrixSystem, actions)
-}
 
 function readCurrentPage() {
   const route = window.location.hash.replace(/^#\/?/, "")
@@ -920,57 +719,12 @@ function StructurePage({ onBack, user, employees }) {
   )
 }
 function App() {
-  const [user, setUser] = useState(null)
-  const [booting, setBooting] = useState(true)
-  const [authError, setAuthError] = useState("")
-  const [photos, setPhotos] = useState([])
-  const [photoCursor, setPhotoCursor] = useState(null)
-  const [photoTotal, setPhotoTotal] = useState(0)
-  const [station, setStation] = useState(DEFAULT_STATION)
-  const [photoLimit, setPhotoLimit] = useState(readInitialPhotoLimit)
-  const [dedupeEnabled, setDedupeEnabled] = useState(readInitialDedupeEnabled)
-  const [dedupeWindowSeconds, setDedupeWindowSeconds] = useState(readInitialDedupeWindow)
-  const [startTime, setStartTime] = useState("")
-  const [endTime, setEndTime] = useState("")
-  const [selectedDepartment, setSelectedDepartment] = useState("")
-  const [selectedPhoto, setSelectedPhoto] = useState(null)
-  const [loadingPhotos, setLoadingPhotos] = useState(false)
-  const [loadingMorePhotos, setLoadingMorePhotos] = useState(false)
-  const [photoError, setPhotoError] = useState("")
   const [employees, setEmployees] = useState([])
   const [departments, setDepartments] = useState([])
   const [currentPage, setCurrentPage] = useState(readCurrentPage)
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
   const [bannerMessage, setBannerMessage] = useState("")
-  const wsRef = useRef(null)
   const bannerTimerRef = useRef(0)
-
-  const hasPhotoAccess = useMemo(() => hasCameraPermission(user), [user])
-  const parsedPhotoLimit = parsePositiveInteger(photoLimit)
-  const parsedDedupeWindow =
-    parsePositiveInteger(dedupeWindowSeconds) ??
-    parsePositiveInteger(DEFAULT_DEDUPE_WINDOW_SECONDS)
-  const filteredPhotos = useMemo(
-    () => (dedupeEnabled ? dedupePhotosByWindow(photos, parsedDedupeWindow) : photos),
-    [dedupeEnabled, parsedDedupeWindow, photos],
-  )
-  const limitedPhotos = useMemo(
-    () => (parsedPhotoLimit ? filteredPhotos.slice(0, parsedPhotoLimit) : filteredPhotos),
-    [filteredPhotos, parsedPhotoLimit],
-  )
-  const displayedPhotos = limitedPhotos
-  const hasMorePhotos = photoCursor != null && (!parsedPhotoLimit || photos.length < parsedPhotoLimit)
-  const accessibleModules = useMemo(() => MODULES.filter((module) => hasModuleAccess(user, module)), [user])
-  const photoDepartmentOptions = useMemo(() => getDepartmentViewOptions(user, departments), [departments, user])
-
-  const getNextPhotoPageSize = useCallback(() => {
-    const batchSize = getPhotoFeedBatchSize()
-    if (!parsedPhotoLimit) {
-      return batchSize
-    }
-
-    return Math.max(Math.min(batchSize, parsedPhotoLimit - photos.length), 0)
-  }, [parsedPhotoLimit, photos.length])
 
   const showBanner = useCallback((message) => {
     setBannerMessage(message)
@@ -978,113 +732,57 @@ function App() {
     bannerTimerRef.current = window.setTimeout(() => setBannerMessage(""), 2400)
   }, [])
 
-  const loadCurrentUser = useCallback(async () => {
-    if (!getStoredToken()) {
-      setBooting(false)
-      setUser(null)
-      return
-    }
+  const {
+    user,
+    setUser,
+    booting,
+    authError,
+    handleLogin: loginUser,
+    handleLogout: logoutUser,
+    handleChangePassword,
+  } = useAuth({
+    onPasswordChanged: () => showBanner("密码修改成功"),
+  })
 
-    try {
-      const data = await fetchCurrentUser()
-      setUser(data.user)
-      setAuthError("")
-    } catch (error) {
-      if (error.status !== 401) {
-        setAuthError(error.message)
-      }
-      setStoredToken("")
-      setUser(null)
-    } finally {
-      setBooting(false)
-    }
-  }, [])
+  const hasPhotoAccess = useMemo(() => hasCameraPermission(user), [user])
+  const accessibleModules = useMemo(() => MODULES.filter((module) => hasModuleAccess(user, module)), [user])
+  const photoDepartmentOptions = useMemo(() => getDepartmentViewOptions(user, departments), [departments, user])
 
-  const loadPhotos = useCallback(async (nextStation = station) => {
-    if (!hasPhotoAccess) {
-      setPhotos([])
-      setPhotoCursor(null)
-      setPhotoTotal(0)
-      setPhotoError("")
-      setLoadingPhotos(false)
-      return
-    }
-
-    setLoadingPhotos(true)
-    setLoadingMorePhotos(false)
-    setPhotoError("")
-
-    try {
-      const initialLimit = parsedPhotoLimit
-        ? Math.min(getPhotoFeedBatchSize(), parsedPhotoLimit)
-        : getPhotoFeedBatchSize()
-      const data = await fetchPhotos(nextStation, selectedDepartment, {
-        limit: initialLimit,
-        cursor: 0,
-        startTime,
-        endTime,
-      })
-      setPhotos(data.items ?? data)
-      setPhotoCursor(data.next_cursor ?? null)
-      setPhotoTotal(data.total ?? data.length ?? 0)
-    } catch (error) {
-      setPhotos([])
-      setPhotoCursor(null)
-      setPhotoTotal(0)
-      setPhotoError(error.message)
-      if (error.status === 401) {
-        setStoredToken("")
-        setUser(null)
-      }
-    } finally {
-      setLoadingPhotos(false)
-    }
-  }, [endTime, hasPhotoAccess, parsedPhotoLimit, selectedDepartment, startTime, station])
-
-  const loadMorePhotos = useCallback(async () => {
-    if (!hasMorePhotos || loadingPhotos || loadingMorePhotos) {
-      return
-    }
-
-    const pageSize = getNextPhotoPageSize()
-    if (!pageSize) {
-      return
-    }
-
-    setLoadingMorePhotos(true)
-    setPhotoError("")
-
-    try {
-      const data = await fetchPhotos(station, selectedDepartment, {
-        limit: pageSize,
-        cursor: photoCursor,
-        startTime,
-        endTime,
-      })
-      setPhotos((current) => [...current, ...(data.items ?? data)])
-      setPhotoCursor(data.next_cursor ?? null)
-      setPhotoTotal(data.total ?? photoTotal)
-    } catch (error) {
-      setPhotoError(error.message)
-      if (error.status === 401) {
-        setStoredToken("")
-        setUser(null)
-      }
-    } finally {
-      setLoadingMorePhotos(false)
-    }
-  }, [
-    endTime,
-    getNextPhotoPageSize,
-    hasMorePhotos,
-    loadingMorePhotos,
-    loadingPhotos,
-    photoCursor,
-    photoTotal,
-    selectedDepartment,
-    startTime,
+  const photoFeed = usePhotoFeed({
+    user,
+    hasPhotoAccess,
+    currentPage,
+    monitorPageKey: PAGE_MONITOR,
+    setUser,
+  })
+  const {
     station,
-  ])
+    setStation,
+    photoLimit,
+    setPhotoLimit,
+    dedupeEnabled,
+    setDedupeEnabled,
+    dedupeWindowSeconds,
+    setDedupeWindowSeconds,
+    startTime,
+    setStartTime,
+    endTime,
+    setEndTime,
+    selectedDepartment,
+    setSelectedDepartment,
+    selectedPhoto,
+    setSelectedPhoto,
+    loadingPhotos,
+    loadingMorePhotos,
+    photoError,
+    displayedPhotos,
+    hasMorePhotos,
+    parsedPhotoLimit,
+    loadPhotos,
+    loadMorePhotos,
+    photoTotal,
+    resetPhotoState,
+  } = photoFeed
 
   const loadEmployees = useCallback(async () => {
     const data = await fetchEmployees()
@@ -1099,62 +797,21 @@ function App() {
   }, [])
 
   useEffect(() => {
-    const timer = window.setTimeout(loadCurrentUser, 0)
-    return () => window.clearTimeout(timer)
-  }, [loadCurrentUser])
-
-  useEffect(() => {
     const handleHashChange = () => setCurrentPage(readCurrentPage())
     window.addEventListener("hashchange", handleHashChange)
     return () => window.removeEventListener("hashchange", handleHashChange)
   }, [])
 
   useEffect(() => {
-    window.localStorage.setItem(PHOTO_LIMIT_STORAGE_KEY, photoLimit)
-  }, [photoLimit])
-
-  useEffect(() => {
-    window.localStorage.setItem(PHOTO_DEDUPE_ENABLED_STORAGE_KEY, String(dedupeEnabled))
-  }, [dedupeEnabled])
-
-  useEffect(() => {
-    window.localStorage.setItem(PHOTO_DEDUPE_WINDOW_STORAGE_KEY, dedupeWindowSeconds)
-  }, [dedupeWindowSeconds])
-
-  useEffect(() => {
     if (!user) {
       const timer = window.setTimeout(() => {
-        setPhotos([])
-        setPhotoCursor(null)
-        setPhotoTotal(0)
         setEmployees([])
         setDepartments([])
-        setStartTime("")
-        setEndTime("")
-        setSelectedDepartment("")
-        setSelectedPhoto(null)
       }, 0)
       return () => window.clearTimeout(timer)
     }
-
-    if (currentPage !== PAGE_MONITOR) {
-      return
-    }
-
-    if (!hasPhotoAccess) {
-      const timer = window.setTimeout(() => {
-        setPhotos([])
-        setPhotoCursor(null)
-        setPhotoTotal(0)
-        setPhotoError("")
-        setSelectedPhoto(null)
-      }, 0)
-      return () => window.clearTimeout(timer)
-    }
-
-    const timer = window.setTimeout(loadPhotos, 0)
-    return () => window.clearTimeout(timer)
-  }, [currentPage, hasPhotoAccess, loadPhotos, user])
+    return undefined
+  }, [user])
 
   useEffect(() => {
     if (!user || user.role !== "admin") {
@@ -1193,81 +850,22 @@ function App() {
   }, [user, currentPage])
 
   useEffect(() => {
-    if (!user) {
-      wsRef.current?.close()
-      wsRef.current = null
-      return
-    }
-
-    if (!hasPhotoAccess || currentPage !== PAGE_MONITOR) {
-      wsRef.current?.close()
-      wsRef.current = null
-      return
-    }
-
-    const ws = new WebSocket(getWebSocketUrl())
-    wsRef.current = ws
-
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data)
-      if (data.type === "new_photo") {
-        loadPhotos()
-      }
-    }
-
-    ws.onclose = () => {
-      if (wsRef.current === ws) {
-        wsRef.current = null
-      }
-    }
-
-    return () => {
-      ws.close()
-      if (wsRef.current === ws) {
-        wsRef.current = null
-      }
-    }
-  }, [currentPage, hasPhotoAccess, loadPhotos, user])
-
-  useEffect(() => {
     return () => window.clearTimeout(bannerTimerRef.current)
   }, [])
 
   const handleLogin = async ({ username, password }) => {
-    const result = await login(username, password)
-    setUser(result.user)
+    const result = await loginUser({ username, password })
     setStation(DEFAULT_STATION)
-    setPhotos([])
-    setPhotoCursor(null)
-    setPhotoTotal(0)
-    setStartTime("")
-    setEndTime("")
-    setSelectedDepartment("")
-    setSelectedPhoto(null)
-    setAuthError("")
+    resetPhotoState()
+    return result
   }
 
   const handleLogout = async () => {
-    await logout()
-    wsRef.current?.close()
-    wsRef.current = null
-    setUser(null)
-    setPhotos([])
-    setPhotoCursor(null)
-    setPhotoTotal(0)
-    setStartTime("")
-    setEndTime("")
-    setSelectedDepartment("")
-    setSelectedPhoto(null)
+    await logoutUser()
+    resetPhotoState()
     setPasswordModalOpen(false)
     setCurrentPage(PAGE_DASHBOARD)
     setRoute(PAGE_DASHBOARD)
-  }
-
-  const handleChangePassword = async ({ oldPassword, newPassword }) => {
-    const result = await changePassword(oldPassword, newPassword)
-    setUser(result.user)
-    showBanner("密码修改成功")
   }
 
   const handleCreateEmployee = async (payload) => {
