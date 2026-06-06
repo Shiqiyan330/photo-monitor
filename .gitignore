@@ -5,3 +5,4 @@ photo-backend/**/__pycache__/
 photo-backend/.pytest_cache/
 photo-monitor/dist/
 photo-monitor/node_modules/
+发送短信.txt
