@@ -1346,6 +1346,70 @@ h4 {
   overflow: auto;
 }
 
+.employee-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.55fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.employee-filter-bar select {
+  border: 1px solid #d8e1ea;
+  border-radius: 10px;
+  padding: 0 12px;
+  min-height: 42px;
+  background: #fff;
+  color: #13202f;
+  font: inherit;
+  font-weight: 700;
+}
+
+.employee-editor-form {
+  gap: 16px;
+}
+
+.admin-form-section {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid rgba(213, 221, 230, 0.9);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.admin-form-section h4 {
+  margin: 0;
+  color: #13202f;
+  font-size: 0.95rem;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.form-grid .wide-field {
+  grid-column: 1 / -1;
+}
+
+.certificate-list {
+  display: grid;
+  gap: 10px;
+}
+
+.certificate-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(110px, 0.9fr) 132px minmax(120px, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.certificate-row .danger-button {
+  min-height: 42px;
+  white-space: nowrap;
+}
+
 .panel-muted {
   color: #718096;
   font-size: 0.92rem;
@@ -1792,6 +1856,16 @@ h4 {
   .employee-row {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .employee-filter-bar,
+  .form-grid,
+  .certificate-row {
+    grid-template-columns: 1fr;
+  }
+
+  .form-grid .wide-field {
+    grid-column: auto;
   }
 
   .employee-actions {
