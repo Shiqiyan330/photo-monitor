@@ -195,6 +195,14 @@ def user_has_any_matrix_permission(user: dict, system: str, actions: set[str]) -
     return False
 
 
+def user_can_read_structure(user: dict) -> bool:
+    if user.get("role") == "admin":
+        return True
+    if user_has_any_matrix_permission(user, "structure", {"read"}):
+        return True
+    return bool(_normalize_department_name(user.get("department")))
+
+
 @dataclass
 class User:
     username: str

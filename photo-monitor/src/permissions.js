@@ -116,12 +116,24 @@ export function hasMatrixReadPermission(user, system) {
   return hasAnyMatrixAction(user, system, ["read"])
 }
 
+export function canReadStructure(user) {
+  if (!user) {
+    return false
+  }
+  if (user.role === "admin") {
+    return true
+  }
+  return hasMatrixReadPermission(user, "structure") || Boolean((user.department || "").trim())
+}
+
 export function hasCameraPermission(user) {
   return hasMatrixReadPermission(user, "photos")
 }
 
 export function hasModuleAccess(user, module) {
-  const actions = module.key === "structure" ? ["read"] : ["read", "create", "update", "delete"]
+  if (module.key === "structure") {
+    return canReadStructure(user)
+  }
+  const actions = ["read", "create", "update", "delete"]
   return hasAnyMatrixAction(user, module.matrixSystem, actions)
 }
-

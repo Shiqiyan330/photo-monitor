@@ -208,7 +208,7 @@ def test_structure_employee_listing_returns_scoped_departments(tmp_path, monkeyp
     assert [employee["username"] for employee in result["employees"]] == ["leader", "ticket"]
 
 
-def test_structure_employee_listing_rejects_user_without_matrix_read_permission(tmp_path, monkeypatch):
+def test_structure_employee_listing_rejects_user_without_matrix_read_permission_or_department(tmp_path, monkeypatch):
     from routers import structure
 
     system = make_employee_system(tmp_path)
@@ -216,8 +216,8 @@ def test_structure_employee_listing_rejects_user_without_matrix_read_permission(
         {
             "username": "viewer",
             "password": "viewer",
-            "department": "总公司/运营部",
-            "permissions": [build_matrix_permission("photos", "总公司/运营部", "read")],
+            "department": "",
+            "permissions": [build_matrix_permission("photos", "headquarters", "read")],
         }
     )
     monkeypatch.setattr(structure, "employee_system", system)
@@ -228,6 +228,43 @@ def test_structure_employee_listing_rejects_user_without_matrix_read_permission(
         )
 
     assert error.value.status_code == 403
+
+
+def test_structure_employee_listing_falls_back_to_home_department(tmp_path, monkeypatch):
+    from routers import structure
+
+    system = make_employee_system(tmp_path)
+    system.create_employee(
+        {
+            "username": "viewer",
+            "password": "viewer",
+            "department": "headquarters",
+            "permissions": [build_matrix_permission("photos", "headquarters", "read")],
+        }
+    )
+    system.create_employee(
+        {
+            "username": "teammate",
+            "password": "teammate",
+            "department": "headquarters",
+            "permissions": [],
+        }
+    )
+    system.create_employee(
+        {
+            "username": "branch",
+            "password": "branch",
+            "department": "branch",
+            "permissions": [],
+        }
+    )
+    monkeypatch.setattr(structure, "employee_system", system)
+
+    result = structure.list_structure_employees(
+        user=system.get_user("viewer").to_public_dict(),
+    )
+
+    assert [employee["username"] for employee in result["employees"]] == ["viewer", "teammate"]
 
 
 def test_structure_employee_listing_wildcard_permission_returns_all_departments(tmp_path, monkeypatch):

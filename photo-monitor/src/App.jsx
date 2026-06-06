@@ -28,9 +28,9 @@ import MonitorPage from "./pages/MonitorPage"
 import OfficeUploadPage from "./pages/OfficeUploadPage"
 import StructurePage from "./pages/StructurePage"
 import {
+  canReadStructure,
   getDepartmentViewOptions,
   hasCameraPermission,
-  hasMatrixReadPermission,
   hasModuleAccess,
 } from "./permissions"
 
@@ -259,7 +259,7 @@ function App() {
   }, [currentPage, loadEmployees, user])
 
   useEffect(() => {
-    if (!user || currentPage !== PAGE_STRUCTURE || !hasMatrixReadPermission(user, "structure")) {
+    if (!user || currentPage !== PAGE_STRUCTURE || !canReadStructure(user)) {
       return
     }
 
@@ -436,7 +436,7 @@ function App() {
     )
   }
 
-  if (currentPage === PAGE_STRUCTURE && hasMatrixReadPermission(user, "structure")) {
+  if (currentPage === PAGE_STRUCTURE && canReadStructure(user)) {
     return (
       <div className="app-shell office-page-shell">
         <StructurePage employees={employees} onBack={openDashboardPage} />

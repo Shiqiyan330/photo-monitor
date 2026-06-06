@@ -32,7 +32,7 @@ export default function StructurePage({ onBack, employees }) {
   return (
     <OfficeModulePage title="公司架构" onBack={onBack}>
       <section className="structure-groups">
-        {departmentGroups.map(([department, members]) => {
+        {departmentGroups.length ? departmentGroups.map(([department, members]) => {
           const collapsed = collapsedDepartments.has(department)
           return (
             <section key={department} className="structure-group">
@@ -57,7 +57,7 @@ export default function StructurePage({ onBack, employees }) {
               ) : null}
             </section>
           )
-        })}
+        }) : <div className="empty-state">当前账号没有可见的公司架构人员。</div>}
       </section>
     </OfficeModulePage>
   )
