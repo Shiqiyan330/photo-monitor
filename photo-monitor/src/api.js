@@ -34,6 +34,19 @@ async function request(path, options = {}) {
     throw error
   }
 
+  if (!isJson) {
+    throw new Error("Expected JSON response from API")
+  }
+
+  return payload
+}
+
+function requireArrayPayload(payload, keys, label) {
+  for (const key of keys) {
+    if (!Array.isArray(payload?.[key])) {
+      throw new Error(`${label} response is missing ${key}`)
+    }
+  }
   return payload
 }
 
@@ -258,7 +271,9 @@ export function fetchEmployees() {
 }
 
 export function fetchStructureEmployees() {
-  return request("/structure/employees")
+  return request("/structure/employees").then((payload) =>
+    requireArrayPayload(payload, ["employees", "departments"], "Structure employees"),
+  )
 }
 
 export function createEmployee(payload) {
