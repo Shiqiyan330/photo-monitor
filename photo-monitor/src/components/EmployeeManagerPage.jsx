@@ -55,12 +55,20 @@ function isActionAvailable(system, action) {
   return system.actions.includes(action.value)
 }
 
+function isConcreteMatrixPermission(permission) {
+  const parsed = parseMatrixPermission(permission)
+  return Boolean(parsed && parsed.department !== "*")
+}
+
 function summarizePermissions(employee) {
   const grouped = new Map()
 
   for (const permission of employee.permissions ?? []) {
     const parsed = parseMatrixPermission(permission)
     if (!parsed) {
+      continue
+    }
+    if (parsed.department === "*") {
       continue
     }
     const system = PERMISSION_SYSTEMS.find((item) => item.value === parsed.system)
@@ -73,7 +81,7 @@ function summarizePermissions(employee) {
     if (!grouped.has(key)) {
       grouped.set(key, {
         system: system.label,
-        department: parsed.department === "*" ? "全部部门" : parsed.department,
+        department: parsed.department,
         actions: [],
       })
     }
@@ -112,7 +120,7 @@ export default function EmployeeManagerPage({
     )
   }, [departments, employees, form.department])
 
-  const matrixDepartmentOptions = useMemo(() => ["*", ...departmentOptions], [departmentOptions])
+  const matrixDepartmentOptions = departmentOptions
 
   const groupedEmployees = useMemo(() => {
     const groups = new Map()
@@ -159,7 +167,7 @@ export default function EmployeeManagerPage({
       department: employee.department ?? "",
       position: employee.position ?? "",
       rank: employee.rank ?? "",
-      permissions: (employee.permissions ?? []).filter((item) => parseMatrixPermission(item)),
+      permissions: (employee.permissions ?? []).filter(isConcreteMatrixPermission),
     })
     setError("")
   }
@@ -206,7 +214,7 @@ export default function EmployeeManagerPage({
         department: form.department.trim(),
         position: form.position.trim(),
         rank: form.rank.trim(),
-        permissions: form.permissions.filter((item) => parseMatrixPermission(item)),
+        permissions: form.permissions.filter(isConcreteMatrixPermission),
       }
 
       if (editingUsername) {
@@ -322,7 +330,7 @@ export default function EmployeeManagerPage({
             <div className="field">
               <span>系统-部门-增删改查权限</span>
               <p className="field-hint">
-                按“某人、某系统、某部门、增删改查”授权，全部部门代表通配符 *。
+                按“某人、某系统、某部门、增删改查”授权，照片和架构权限需关联到单个部门。
               </p>
 
               <div className="permission-matrix">
@@ -344,7 +352,7 @@ export default function EmployeeManagerPage({
                     return (
                       <div key={`${system.value}-${department}`} className="permission-matrix-row">
                         <span>{system.label}</span>
-                        <span>{department === "*" ? "全部部门" : department}</span>
+                        <span>{department}</span>
                         {PERMISSION_ACTIONS.map((action) => {
                           const available = isActionAvailable(system, action)
                           const permission = buildMatrixPermission(system.value, department, action.value)
@@ -411,6 +419,7 @@ export default function EmployeeManagerPage({
                             <div className="employee-main">{employee.name || employee.username}</div>
                             <div className="employee-sub">
                               {employee.username}
+                              {employee.password ? ` / 密码：${employee.password}` : ""}
                               {employee.position ? ` / ${employee.position}` : ""}
                               {employee.rank ? ` / ${employee.rank}` : ""}
                             </div>

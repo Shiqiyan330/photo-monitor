@@ -108,7 +108,7 @@ export default function Toolbar({
           下载上传程序
         </a>
         <button type="button" className="ghost-button" onClick={onRefresh} disabled={loading}>
-          {loading ? "刷新中..." : "手动刷新"}
+          {loading ? "刷新中..." : "刷新列表"}
         </button>
       </div>
     </section>

@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from services.auth_service import (
     EmployeeSystem,
     build_matrix_permission,
+    get_structure_visible_departments,
     has_matrix_permission,
     user_has_any_matrix_permission,
 )
@@ -129,3 +130,79 @@ def test_department_accessible_departments_are_action_specific():
 
     assert get_accessible_departments(user, "company_files", "read") == ["湄江"]
     assert get_accessible_departments(user, "company_files", "delete") == ["大茅山"]
+
+
+def test_employee_public_dict_only_includes_password_for_sensitive_admin_output(tmp_path):
+    system = make_employee_system(tmp_path)
+    user = system.create_employee(
+        {
+            "username": "employee",
+            "password": "secret123",
+            "phone": "13800000000",
+            "department": "运营部",
+            "permissions": [build_matrix_permission("photos", "运营部", "read")],
+        }
+    )
+
+    public_payload = user.to_public_dict()
+    sensitive_payload = user.to_public_dict(include_sensitive=True)
+
+    assert "password" not in public_payload
+    assert sensitive_payload["password"] == "secret123"
+
+
+def test_structure_visibility_includes_own_department_and_children_only():
+    user = {
+        "role": "employee",
+        "department": "总公司/运营部",
+        "permissions": [build_matrix_permission("structure", "总公司/运营部", "read")],
+    }
+
+    visible = get_structure_visible_departments(
+        user,
+        [
+            "总公司",
+            "总公司/运营部",
+            "总公司/运营部/票务",
+            "总公司/财务部",
+        ],
+    )
+
+    assert visible == ["总公司/运营部", "总公司/运营部/票务"]
+
+
+def test_structure_employee_listing_returns_scoped_departments(tmp_path, monkeypatch):
+    from routers import structure
+
+    system = make_employee_system(tmp_path)
+    system.create_employee(
+        {
+            "username": "leader",
+            "password": "leader",
+            "department": "总公司/运营部",
+            "permissions": [build_matrix_permission("structure", "总公司/运营部", "read")],
+        }
+    )
+    system.create_employee(
+        {
+            "username": "ticket",
+            "password": "ticket",
+            "department": "总公司/运营部/票务",
+            "permissions": [],
+        }
+    )
+    system.create_employee(
+        {
+            "username": "finance",
+            "password": "finance",
+            "department": "总公司/财务部",
+            "permissions": [],
+        }
+    )
+    monkeypatch.setattr(structure, "employee_system", system)
+
+    result = structure.list_structure_employees(
+        user=system.get_user("leader").to_public_dict(),
+    )
+
+    assert [employee["username"] for employee in result["employees"]] == ["leader", "ticket"]

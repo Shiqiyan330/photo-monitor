@@ -12,6 +12,7 @@ import {
   fetchCurrentUser,
   fetchEmployees,
   fetchPhotos,
+  fetchStructureEmployees,
   fetchStudyArticles,
   fetchUploadedFiles,
   getStoredToken,
@@ -37,7 +38,7 @@ import Toolbar from "./components/Toolbar"
 const DEFAULT_STATION = "xiazhan"
 const DEFAULT_PHOTO_LIMIT = ""
 const DEFAULT_DEDUPE_ENABLED = true
-const DEFAULT_DEDUPE_WINDOW_SECONDS = "20"
+const DEFAULT_DEDUPE_WINDOW_SECONDS = "10"
 const PHOTO_FEED_BATCH_SIZE = 24
 const MOBILE_PHOTO_FEED_BATCH_SIZE = 4
 const PHOTO_LIMIT_STORAGE_KEY = "photo_monitor_photo_limit"
@@ -235,6 +236,31 @@ function getMatrixDepartments(user, system, action) {
   return uniqueStrings(departments)
 }
 
+function isSameOrChildDepartment(department, parent) {
+  const normalizedDepartment = (department || "").trim()
+  const normalizedParent = (parent || "").trim()
+  return (
+    Boolean(normalizedDepartment && normalizedParent) &&
+    (normalizedDepartment === normalizedParent || normalizedDepartment.startsWith(`${normalizedParent}/`))
+  )
+}
+
+function getStructureVisibleDepartments(user, departments) {
+  const normalizedDepartments = uniqueStrings(departments)
+  if (!user) {
+    return []
+  }
+  if (user.role === "admin") {
+    return normalizedDepartments
+  }
+
+  const allowedDepartments = getMatrixDepartments(user, "structure", "read")
+  const scopedDepartments = allowedDepartments.length ? allowedDepartments : uniqueStrings([user.department])
+  return normalizedDepartments.filter((department) =>
+    scopedDepartments.some((allowed) => isSameOrChildDepartment(department, allowed)),
+  )
+}
+
 function getDepartmentViewOptions(user, departments, system = null, action = "read") {
   if (!user) {
     return []
@@ -289,8 +315,8 @@ function BrandMark({ compact = false }) {
         <span>Logo</span>
       </div>
       <div>
-        <div className="brand-name">越岚索道</div>
-        {!compact ? <div className="brand-subtitle">办公管理系统</div> : null}
+        <div className="brand-name">监控照片管理系统</div>
+        {!compact ? <div className="brand-subtitle">越岚索道</div> : null}
       </div>
     </div>
   )
@@ -303,7 +329,7 @@ function DashboardPage({ user, modules, onOpenModule, onOpenEmployees, onOpenPas
         <div>
           <BrandMark />
           <p className="eyebrow">Main Dashboard</p>
-          <h1>办公管理主界面</h1>
+          <h1>监控照片管理系统</h1>
           <p className="hero-copy">根据账号权限展示可用功能，进入对应模块处理监控、文档、学习、台账和组织信息。</p>
         </div>
 
@@ -828,7 +854,12 @@ function LedgerWorkspacePage({ onBack, user, departments, showBanner }) {
 }
 function StructurePage({ onBack, user, employees }) {
   const [collapsedDepartments, setCollapsedDepartments] = useState(new Set())
-  const visibleEmployees = user.role === "admin" ? employees : [user]
+  const allDepartments = uniqueStrings(employees.map((employee) => employee.department))
+  const visibleDepartments = getStructureVisibleDepartments(user, allDepartments)
+  const visibleEmployees =
+    user.role === "admin"
+      ? employees
+      : employees.filter((employee) => visibleDepartments.includes(employee.department || ""))
   const groups = new Map()
 
   for (const employee of visibleEmployees) {
@@ -1061,6 +1092,12 @@ function App() {
     setDepartments(data.departments)
   }, [])
 
+  const loadStructureEmployees = useCallback(async () => {
+    const data = await fetchStructureEmployees()
+    setEmployees(data.employees)
+    setDepartments(data.departments)
+  }, [])
+
   useEffect(() => {
     const timer = window.setTimeout(loadCurrentUser, 0)
     return () => window.clearTimeout(timer)
@@ -1134,6 +1171,15 @@ function App() {
     const timer = window.setTimeout(loadEmployees, 0)
     return () => window.clearTimeout(timer)
   }, [currentPage, loadEmployees, user])
+
+  useEffect(() => {
+    if (!user || user.role === "admin" || currentPage !== PAGE_STRUCTURE || !hasMatrixReadPermission(user, "structure")) {
+      return
+    }
+
+    const timer = window.setTimeout(loadStructureEmployees, 0)
+    return () => window.clearTimeout(timer)
+  }, [currentPage, loadStructureEmployees, user])
 
   useEffect(() => {
     if (!user || currentPage === PAGE_DASHBOARD || currentPage === PAGE_EMPLOYEES) {
@@ -1359,7 +1405,7 @@ function App() {
         <div>
           <BrandMark compact />
           <p className="eyebrow">Photo Monitor</p>
-          <h1>员工监控照片工作台</h1>
+          <h1>监控照片管理系统</h1>
           <p className="hero-copy">支持按站点和时间段查看照片，控制展示数量，并按秒级时间窗去重展示。</p>
 
         </div>
@@ -1373,17 +1419,6 @@ function App() {
           <div className="user-actions">
             <button type="button" className="ghost-button" onClick={openDashboardPage}>
               返回主界面
-            </button>
-            <button type="button" className="ghost-button" onClick={() => setPasswordModalOpen(true)}>
-              修改密码
-            </button>
-            {user.role === "admin" ? (
-              <button type="button" className="ghost-button" onClick={openEmployeePage}>
-                员工管理
-              </button>
-            ) : null}
-            <button type="button" className="ghost-button" onClick={handleLogout}>
-              退出登录
             </button>
           </div>
         </div>

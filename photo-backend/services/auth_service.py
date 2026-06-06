@@ -87,6 +87,33 @@ def extract_matrix_departments(permissions: list[str] | None, system: str, actio
     return list(dict.fromkeys(departments))
 
 
+def _is_same_or_child_department(department: str, parent: str) -> bool:
+    normalized_department = _normalize_department_name(department)
+    normalized_parent = _normalize_department_name(parent)
+    if not normalized_department or not normalized_parent:
+        return False
+    return normalized_department == normalized_parent or normalized_department.startswith(f"{normalized_parent}/")
+
+
+def get_structure_visible_departments(user: dict, departments: list[str]) -> list[str]:
+    normalized_departments = list(dict.fromkeys(_normalize_department_name(item) for item in departments if item))
+    if user.get("role") == "admin":
+        return normalized_departments
+
+    allowed_departments = extract_matrix_departments(user.get("permissions") or [], "structure", "read")
+    if ALL_DEPARTMENTS in allowed_departments:
+        return normalized_departments
+
+    if not allowed_departments and user.get("department"):
+        allowed_departments = [_normalize_department_name(user.get("department"))]
+
+    return [
+        department
+        for department in normalized_departments
+        if any(_is_same_or_child_department(department, allowed) for allowed in allowed_departments)
+    ]
+
+
 def extract_permission_departments(permissions: list[str] | None) -> list[str]:
     if not permissions:
         return []
@@ -158,8 +185,8 @@ class User:
     def to_dict(self) -> dict:
         return asdict(self)
 
-    def to_public_dict(self) -> dict:
-        return {
+    def to_public_dict(self, include_sensitive: bool = False) -> dict:
+        payload = {
             "username": self.username,
             "role": self.role,
             "phone": self.phone,
@@ -174,6 +201,9 @@ class User:
             "department_permissions": extract_permission_departments(self.permissions),
             "permission_matrix": self.permissions,
         }
+        if include_sensitive:
+            payload["password"] = self.password
+        return payload
 
     @classmethod
     def from_dict(cls, data: dict) -> "User":

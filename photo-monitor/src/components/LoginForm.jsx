@@ -28,19 +28,19 @@ export default function LoginForm({ onSubmit, serverMessage }) {
             <span>Logo</span>
           </div>
           <div>
-            <div className="brand-name">越岚索道</div>
-            <div className="brand-subtitle">办公管理系统</div>
+            <div className="brand-name">监控照片管理系统</div>
+            <div className="brand-subtitle">越岚索道</div>
           </div>
         </div>
         <p className="eyebrow">Employee Login</p>
-        <h1 className="login-title">员工登录系统</h1>
+        <h1 className="login-title">监控照片管理系统</h1>
         <p className="hero-copy">
           账号数据保存在当前项目的 <code>photo-backend/users.json</code> 中，员工可以继续使用已有账号登录。
         </p>
       </div>
 
       <form className="login-card" onSubmit={handleSubmit}>
-        <h2>登录到监控照片平台</h2>
+        <h2>登录系统</h2>
 
         <label className="field">
           <span>用户名</span>

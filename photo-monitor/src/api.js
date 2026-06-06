@@ -257,6 +257,10 @@ export function fetchEmployees() {
   return request("/admin/employees")
 }
 
+export function fetchStructureEmployees() {
+  return request("/structure/employees")
+}
+
 export function createEmployee(payload) {
   return request("/admin/employees", {
     method: "POST",
