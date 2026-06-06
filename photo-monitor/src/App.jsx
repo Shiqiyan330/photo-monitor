@@ -169,6 +169,8 @@ function App() {
   const [currentPage, setCurrentPage] = useState(readCurrentPage)
   const [passwordModalOpen, setPasswordModalOpen] = useState(false)
   const [bannerMessage, setBannerMessage] = useState("")
+  const [structureStatus, setStructureStatus] = useState("idle")
+  const [structureError, setStructureError] = useState("")
   const bannerTimerRef = useRef(0)
 
   const showBanner = useCallback((message) => {
@@ -220,9 +222,20 @@ function App() {
   }, [])
 
   const loadStructureEmployees = useCallback(async () => {
-    const data = await fetchStructureEmployees()
-    setEmployees(data.employees)
-    setDepartments(data.departments)
+    setStructureStatus("loading")
+    setStructureError("")
+
+    try {
+      const data = await fetchStructureEmployees()
+      setEmployees(data.employees)
+      setDepartments(data.departments)
+      setStructureStatus("loaded")
+    } catch (error) {
+      setEmployees([])
+      setDepartments([])
+      setStructureError(error.message)
+      setStructureStatus("error")
+    }
   }, [])
 
   useEffect(() => {
@@ -236,6 +249,8 @@ function App() {
       const timer = window.setTimeout(() => {
         setEmployees([])
         setDepartments([])
+        setStructureStatus("idle")
+        setStructureError("")
       }, 0)
       return () => window.clearTimeout(timer)
     }
@@ -439,7 +454,12 @@ function App() {
   if (currentPage === PAGE_STRUCTURE && canReadStructure(user)) {
     return (
       <div className="app-shell office-page-shell">
-        <StructurePage employees={employees} onBack={openDashboardPage} />
+        <StructurePage
+          employees={employees}
+          error={structureError}
+          loading={structureStatus !== "loaded" && structureStatus !== "error"}
+          onBack={openDashboardPage}
+        />
       </div>
     )
   }

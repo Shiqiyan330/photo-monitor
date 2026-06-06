@@ -267,6 +267,49 @@ def test_structure_employee_listing_falls_back_to_home_department(tmp_path, monk
     assert [employee["username"] for employee in result["employees"]] == ["viewer", "teammate"]
 
 
+def test_structure_employee_listing_http_uses_token_user_home_department(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from main import app
+    from routers import auth, deps, structure
+
+    system = make_employee_system(tmp_path)
+    system.create_employee(
+        {
+            "username": "viewer",
+            "password": "viewer",
+            "department": "headquarters",
+            "permissions": [build_matrix_permission("photos", "headquarters", "read")],
+        }
+    )
+    system.create_employee(
+        {
+            "username": "teammate",
+            "password": "teammate",
+            "department": "headquarters",
+            "permissions": [],
+        }
+    )
+    system.create_employee(
+        {
+            "username": "branch",
+            "password": "branch",
+            "department": "branch",
+            "permissions": [],
+        }
+    )
+    monkeypatch.setattr(auth, "employee_system", system)
+    monkeypatch.setattr(deps, "employee_system", system)
+    monkeypatch.setattr(structure, "employee_system", system)
+
+    client = TestClient(app)
+    login_response = client.post("/auth/login", json={"username": "viewer", "password": "viewer"})
+    token = login_response.json()["token"]
+    response = client.get("/structure/employees", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    assert [employee["username"] for employee in response.json()["employees"]] == ["viewer", "teammate"]
+
+
 def test_structure_employee_listing_wildcard_permission_returns_all_departments(tmp_path, monkeypatch):
     from routers import structure
 

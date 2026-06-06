@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { OfficeModulePage } from "./OfficeUploadPage"
 
-export default function StructurePage({ onBack, employees }) {
+export default function StructurePage({ onBack, employees, loading = false, error = "" }) {
   const [collapsedDepartments, setCollapsedDepartments] = useState(new Set())
   const groups = new Map()
 
@@ -32,7 +32,9 @@ export default function StructurePage({ onBack, employees }) {
   return (
     <OfficeModulePage title="公司架构" onBack={onBack}>
       <section className="structure-groups">
-        {departmentGroups.length ? departmentGroups.map(([department, members]) => {
+        {loading ? <div className="empty-state">正在加载公司架构...</div> : null}
+        {!loading && error ? <div className="empty-state">{error}</div> : null}
+        {!loading && !error && departmentGroups.length ? departmentGroups.map(([department, members]) => {
           const collapsed = collapsedDepartments.has(department)
           return (
             <section key={department} className="structure-group">
@@ -57,7 +59,10 @@ export default function StructurePage({ onBack, employees }) {
               ) : null}
             </section>
           )
-        }) : <div className="empty-state">当前账号没有可见的公司架构人员。</div>}
+        }) : null}
+        {!loading && !error && !departmentGroups.length ? (
+          <div className="empty-state">当前账号没有可见的公司架构人员。</div>
+        ) : null}
       </section>
     </OfficeModulePage>
   )
