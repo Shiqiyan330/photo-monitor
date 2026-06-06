@@ -60,6 +60,23 @@ function isConcreteMatrixPermission(permission) {
   return Boolean(parsed && parsed.department !== "*")
 }
 
+function syncDefaultStructurePermission(permissions, department) {
+  const normalizedDepartment = (department || "").trim()
+  const nonStructurePermissions = permissions.filter((permission) => {
+    const parsed = parseMatrixPermission(permission)
+    return !parsed || parsed.system !== "structure"
+  })
+
+  if (!normalizedDepartment) {
+    return nonStructurePermissions
+  }
+
+  return [
+    ...nonStructurePermissions,
+    buildMatrixPermission("structure", normalizedDepartment, "read"),
+  ]
+}
+
 function summarizePermissions(employee) {
   const grouped = new Map()
 
@@ -173,7 +190,16 @@ export default function EmployeeManagerPage({
   }
 
   const handleChange = (field, value) => {
-    setForm((current) => ({ ...current, [field]: value }))
+    setForm((current) => {
+      if (!editingUsername && field === "department") {
+        return {
+          ...current,
+          department: value,
+          permissions: syncDefaultStructurePermission(current.permissions, value),
+        }
+      }
+      return { ...current, [field]: value }
+    })
   }
 
   const togglePermission = (value) => {
