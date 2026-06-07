@@ -1,12 +1,10 @@
 export function BrandMark({ compact = false }) {
   return (
     <div className={compact ? "brand-mark compact" : "brand-mark"}>
-      <div className="brand-logo-slot" aria-hidden="true">
-        <span>Logo</span>
-      </div>
+      <div className="brand-logo-slot" aria-hidden="true" />
       <div>
-        <div className="brand-name">监控照片管理系统</div>
-        {!compact ? <div className="brand-subtitle">越岚索道</div> : null}
+        <div className="brand-name">越岚索道</div>
+        {!compact ? <div className="brand-subtitle">照片管理</div> : null}
       </div>
     </div>
   )
@@ -26,11 +24,7 @@ export default function DashboardPage({
       <section className="dashboard-hero">
         <div>
           <BrandMark />
-          <p className="eyebrow">Main Dashboard</p>
-          <h1>监控照片管理系统</h1>
-          <p className="hero-copy">
-            根据账号权限展示可用功能，进入对应模块处理监控、文档、学习、台账和组织信息。
-          </p>
+          <h1>工作台</h1>
         </div>
 
         <div className="user-panel">

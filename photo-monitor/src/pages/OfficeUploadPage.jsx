@@ -10,11 +10,10 @@ export function OfficeModulePage({ title, children, onBack }) {
       <section className="office-page-header">
         <div>
           <BrandMark compact />
-          <p className="eyebrow">Workspace</p>
           <h2>{title}</h2>
         </div>
         <button type="button" className="ghost-button" onClick={onBack}>
-          返回主界面
+          返回工作台
         </button>
       </section>
       {children}
@@ -102,8 +101,8 @@ function UploadPanel({ title, description, departmentOptions, onSubmit, submitti
         <span className="material-symbols-outlined file-drop-icon" aria-hidden="true">
           upload_file
         </span>
-        <span className="file-drop-title">{file ? file.name : "拖拽文件到这里，或点击选择文件"}</span>
-        <span className="file-drop-meta">{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "支持常用文档、图片和压缩包"}</span>
+        <span className="file-drop-title">{file ? file.name : "选择文件"}</span>
+        <span className="file-drop-meta">{file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "可拖拽上传"}</span>
       </label>
 
       {progress > 0 ? (
@@ -130,9 +129,8 @@ function UploadList({ title, items, emptyText, onDelete, onDownload, onView, can
       <div className="panel-header">
         <div>
           <h3>{title}</h3>
-          <p className="panel-muted">按部门归档，支持在线查看、下载和删除。</p>
         </div>
-        <span className="file-count-badge">共 {items.length} 个文件</span>
+        <span className="file-count-badge">{items.length} 个文件</span>
       </div>
 
       {items.length ? (
@@ -212,7 +210,7 @@ export default function OfficeUploadPage({ config, departments, onBack, showBann
       <section className="office-toolbar">
         <div>
           <h3>{config.toolbarTitle}</h3>
-          <p className="panel-muted">{config.toolbarDescription}</p>
+          {config.toolbarDescription ? <p className="panel-muted">{config.toolbarDescription}</p> : null}
         </div>
         <button type="button" className="ghost-button icon-button-text" onClick={loadItems} disabled={loading}>
           <span className="material-symbols-outlined button-icon" aria-hidden="true">
@@ -250,4 +248,3 @@ export default function OfficeUploadPage({ config, departments, onBack, showBann
     </OfficeModulePage>
   )
 }
-

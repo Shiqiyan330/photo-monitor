@@ -365,14 +365,11 @@ export default function EmployeeManagerPage({
       <div className="admin-page-header">
         <div>
           <div className="brand-mark compact">
-            <div className="brand-logo-slot" aria-hidden="true">
-              <span>Logo</span>
-            </div>
+            <div className="brand-logo-slot" aria-hidden="true" />
             <div>
               <div className="brand-name">越岚索道</div>
             </div>
           </div>
-          <p className="eyebrow">Admin</p>
           <h2>员工管理</h2>
         </div>
         <button type="button" className="ghost-button" onClick={onBack}>
@@ -591,7 +588,6 @@ export default function EmployeeManagerPage({
 
             <section className="admin-form-section">
               <h4>矩阵权限</h4>
-              <p className="field-hint">按账号、系统、部门和操作授权；公司架构只支持查看权限。</p>
 
               <div className="permission-matrix">
                 <div className="permission-matrix-head">
