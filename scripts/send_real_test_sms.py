@@ -15,6 +15,16 @@ BACKEND_ROOT = PROJECT_ROOT / "photo-backend"
 sys.path.insert(0, str(BACKEND_ROOT))
 
 
+def missing_dependency_message(missing: str) -> str:
+    return (
+        f"ERROR: missing Python dependency {missing}.\n"
+        f"Current Python: {sys.executable}\n"
+        f"Install for this Python: {sys.executable} -m pip install -r photo-backend/requirements.txt\n"
+        "Or run the script with the same interpreter used by update.sh, for example: "
+        "python3 scripts/send_real_test_sms.py --phone <phone> --yes"
+    )
+
+
 def load_project_env() -> None:
     env_files = [PROJECT_ROOT / ".env", BACKEND_ROOT / ".env"]
     try:
@@ -121,10 +131,7 @@ def main() -> None:
         from services.sms_service import AliyunSmsSender, load_sms_settings
     except ModuleNotFoundError as error:
         missing = error.name or str(error)
-        raise SystemExit(
-            "ERROR: missing Python dependency "
-            f"{missing}. Run: pip install -r photo-backend/requirements.txt"
-        ) from error
+        raise SystemExit(missing_dependency_message(missing)) from error
 
     settings = load_sms_settings()
     if not settings.sign_name:
@@ -158,10 +165,7 @@ def main() -> None:
         )
     except ModuleNotFoundError as error:
         missing = error.name or str(error)
-        raise SystemExit(
-            "ERROR: missing Python dependency "
-            f"{missing}. Run: pip install -r photo-backend/requirements.txt"
-        ) from error
+        raise SystemExit(missing_dependency_message(missing)) from error
     except Exception as error:
         code = getattr(error, "code", "")
         request_id = getattr(error, "request_id", "")
