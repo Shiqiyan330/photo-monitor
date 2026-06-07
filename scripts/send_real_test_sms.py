@@ -162,6 +162,27 @@ def main() -> None:
             "ERROR: missing Python dependency "
             f"{missing}. Run: pip install -r photo-backend/requirements.txt"
         ) from error
+    except Exception as error:
+        code = getattr(error, "code", "")
+        request_id = getattr(error, "request_id", "")
+        message = getattr(error, "message", "") or str(error)
+        data = getattr(error, "data", None)
+        print("Aliyun rejected the request:")
+        print_json(
+            {
+                "code": code,
+                "request_id": request_id,
+                "message": message,
+                "data": data,
+            }
+        )
+        if code == "SignatureDoesNotMatch":
+            print(
+                "Hint: check ALIBABA_CLOUD_ACCESS_KEY_ID and "
+                "ALIBABA_CLOUD_ACCESS_KEY_SECRET for extra spaces, wrong key pairs, "
+                "expired/disabled keys, or shell variables overriding .env."
+            )
+        raise SystemExit(3) from error
     print("Aliyun response:")
     print_json(response)
 
