@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import multiprocessing
 import os
 import threading
 import time
@@ -128,28 +129,60 @@ class SmsLogStore:
         self.save(items)
 
 
+def _send_sms_with_aliyun_sdk(phone: str, sign_name: str, template_code: str, template_params: dict) -> dict:
+    from alibabacloud_credentials.client import Client as CredentialClient
+    from alibabacloud_dysmsapi20170525 import models as dysms_models
+    from alibabacloud_dysmsapi20170525.client import Client
+    from alibabacloud_tea_openapi import models as open_api_models
+    from alibabacloud_tea_util import models as util_models
+
+    config = open_api_models.Config(credential=CredentialClient())
+    config.endpoint = "dysmsapi.aliyuncs.com"
+    client = Client(config)
+    request = dysms_models.SendSmsRequest(
+        phone_numbers=phone,
+        sign_name=sign_name,
+        template_code=template_code,
+        template_param=json.dumps(template_params, ensure_ascii=False),
+    )
+    response = client.send_sms_with_options(request, util_models.RuntimeOptions())
+    return {
+        "request_id": getattr(response.body, "request_id", ""),
+        "code": getattr(response.body, "code", ""),
+    }
+
+
+def _send_sms_subprocess_worker(queue, phone: str, sign_name: str, template_code: str, template_params: dict) -> None:
+    try:
+        queue.put({"ok": True, "response": _send_sms_with_aliyun_sdk(phone, sign_name, template_code, template_params)})
+    except Exception as error:
+        queue.put({"ok": False, "error": str(error)})
+
+
+def _send_sms_in_subprocess(phone: str, sign_name: str, template_code: str, template_params: dict) -> dict:
+    context = multiprocessing.get_context("spawn")
+    queue = context.Queue()
+    process = context.Process(
+        target=_send_sms_subprocess_worker,
+        args=(queue, phone, sign_name, template_code, template_params),
+    )
+    process.start()
+    process.join()
+
+    if queue.empty():
+        raise RuntimeError(f"Aliyun SMS subprocess exited without a response, exit_code={process.exitcode}")
+
+    payload = queue.get()
+    if not payload.get("ok"):
+        raise RuntimeError(payload.get("error") or "Aliyun SMS subprocess failed")
+    return payload["response"]
+
+
 class AliyunSmsSender:
     def send(self, phone: str, sign_name: str, template_code: str, template_params: dict) -> dict:
-        from alibabacloud_credentials.client import Client as CredentialClient
-        from alibabacloud_dysmsapi20170525 import models as dysms_models
-        from alibabacloud_dysmsapi20170525.client import Client
-        from alibabacloud_tea_openapi import models as open_api_models
-        from alibabacloud_tea_util import models as util_models
-
-        config = open_api_models.Config(credential=CredentialClient())
-        config.endpoint = "dysmsapi.aliyuncs.com"
-        client = Client(config)
-        request = dysms_models.SendSmsRequest(
-            phone_numbers=phone,
-            sign_name=sign_name,
-            template_code=template_code,
-            template_param=json.dumps(template_params, ensure_ascii=False),
-        )
-        response = client.send_sms_with_options(request, util_models.RuntimeOptions())
-        return {
-            "request_id": getattr(response.body, "request_id", ""),
-            "code": getattr(response.body, "code", ""),
-        }
+        if threading.current_thread() is threading.main_thread():
+            return _send_sms_with_aliyun_sdk(phone, sign_name, template_code, template_params)
+        return _send_sms_in_subprocess(phone, sign_name, template_code, template_params)
 
 
 def run_due_reminders(

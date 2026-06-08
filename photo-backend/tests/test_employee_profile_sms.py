@@ -1,4 +1,5 @@
 import logging
+import threading
 from pathlib import Path
 from datetime import date, datetime
 
@@ -242,6 +243,40 @@ def test_sms_scheduler_tick_logs_scan_result(caplog, monkeypatch):
     assert len(calls) == 1
     assert state["last_run_date"] == "2026-06-08"
     assert "SMS reminder scan completed" in caplog.text
+
+
+def test_aliyun_sender_uses_subprocess_outside_main_thread(monkeypatch):
+    import services.sms_service as sms_service
+
+    calls = []
+
+    def direct_send(*_args, **_kwargs):
+        raise AssertionError("non-main threads must not call the Aliyun SDK directly")
+
+    def subprocess_send(phone, sign_name, template_code, template_params):
+        calls.append((phone, sign_name, template_code, template_params))
+        return {"code": "OK", "request_id": "subprocess-request"}
+
+    monkeypatch.setattr(sms_service, "_send_sms_with_aliyun_sdk", direct_send)
+    monkeypatch.setattr(sms_service, "_send_sms_in_subprocess", subprocess_send)
+
+    result = {}
+
+    thread = threading.Thread(
+        target=lambda: result.update(
+            response=sms_service.AliyunSmsSender().send(
+                "13800000000",
+                "浙江越岚索道管理",
+                "SMS_506865121",
+                {"name": "测试员工"},
+            )
+        )
+    )
+    thread.start()
+    thread.join(timeout=5)
+
+    assert result["response"] == {"code": "OK", "request_id": "subprocess-request"}
+    assert calls == [("13800000000", "浙江越岚索道管理", "SMS_506865121", {"name": "测试员工"})]
 
 
 def test_admin_sms_endpoints_require_admin(tmp_path, monkeypatch):
