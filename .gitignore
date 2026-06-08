@@ -1,5 +1,6 @@
 photo-backend/photos
 .env
+certs/
 photo-backend/.thumbnails
 photo-backend/__pycache__/
 photo-backend/**/__pycache__/
