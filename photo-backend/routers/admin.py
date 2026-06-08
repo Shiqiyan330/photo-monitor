@@ -22,6 +22,7 @@ class EmployeePayload(BaseModel):
     id_number: str = ""
     birthday: str = ""
     home_address: str = ""
+    emergency_contact: str = ""
     certificates: list[dict] = Field(default_factory=list)
     permissions: list[str] = Field(default_factory=list)
 

@@ -33,6 +33,7 @@ def test_employee_profile_fields_round_trip(tmp_path):
             "id_number": "330106199001012345",
             "birthday": "1990-01-02",
             "home_address": "杭州市西湖区",
+            "emergency_contact": "张三（配偶）13800000002",
             "certificates": [
                 {
                     "name": "特种设备作业证",
@@ -48,6 +49,7 @@ def test_employee_profile_fields_round_trip(tmp_path):
     assert public["id_number"] == "330106199001012345"
     assert public["birthday"] == "1990-01-02"
     assert public["home_address"] == "杭州市西湖区"
+    assert public["emergency_contact"] == "张三（配偶）13800000002"
     assert public["certificates"] == [
         {
             "name": "特种设备作业证",
@@ -84,6 +86,7 @@ def test_employee_profile_defaults_for_existing_records(tmp_path):
     assert public["id_number"] == ""
     assert public["birthday"] == ""
     assert public["home_address"] == ""
+    assert public["emergency_contact"] == ""
     assert public["certificates"] == []
 
 
@@ -108,6 +111,7 @@ def test_user_profile_update_only_changes_personal_fields(tmp_path):
             "id_number": "330106199001012345",
             "birthday": "1990-01-02",
             "home_address": "New Address",
+            "emergency_contact": "李四（父亲）13800000003",
             "certificates": [{"name": "Cert", "number": "C-1", "expires_at": "2026-09-01"}],
             "department": "Other",
             "permissions": ["perm:structure:*:read"],
@@ -120,6 +124,7 @@ def test_user_profile_update_only_changes_personal_fields(tmp_path):
     assert public["id_number"] == "330106199001012345"
     assert public["birthday"] == "1990-01-02"
     assert public["home_address"] == "New Address"
+    assert public["emergency_contact"] == "李四（父亲）13800000003"
     assert public["certificates"][0]["name"] == "Cert"
     assert public["department"] == "HQ"
     assert public["permissions"] == ["perm:structure:HQ:read"]

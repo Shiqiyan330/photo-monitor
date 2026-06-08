@@ -20,6 +20,7 @@ function createInitialForm(user) {
     id_number: user?.id_number ?? "",
     birthday: user?.birthday ?? "",
     home_address: user?.home_address ?? "",
+    emergency_contact: user?.emergency_contact ?? "",
     certificates: user?.certificates?.length ? user.certificates : [],
   }
 }
@@ -82,6 +83,7 @@ export default function ProfileModal({ user, onClose, onSubmit }) {
         id_number: form.id_number.trim(),
         birthday: form.birthday.trim(),
         home_address: form.home_address.trim(),
+        emergency_contact: form.emergency_contact.trim(),
         certificates: normalizeCertificates(form.certificates),
       })
       onClose()
@@ -141,6 +143,14 @@ export default function ProfileModal({ user, onClose, onSubmit }) {
                 <input
                   value={form.home_address}
                   onChange={(event) => handleChange("home_address", event.target.value)}
+                />
+              </label>
+              <label className="field wide-field">
+                <span>紧急联系人</span>
+                <input
+                  value={form.emergency_contact}
+                  onChange={(event) => handleChange("emergency_contact", event.target.value)}
+                  placeholder="姓名、关系、联系电话"
                 />
               </label>
             </div>

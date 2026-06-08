@@ -257,6 +257,7 @@ class User:
     id_number: str = ""
     birthday: str = ""
     home_address: str = ""
+    emergency_contact: str = ""
     certificates: list[dict] = field(default_factory=list)
     avatar: str = ""
     join_date: str = ""
@@ -287,6 +288,7 @@ class User:
             "id_number": self.id_number,
             "birthday": self.birthday,
             "home_address": self.home_address,
+            "emergency_contact": self.emergency_contact,
             "certificates": self.certificates,
             "avatar": self.avatar,
             "join_date": self.join_date,
@@ -311,6 +313,7 @@ class User:
             id_number=_normalize_text(data.get("id_number", "")),
             birthday=_validate_iso_date(data.get("birthday", ""), "生日"),
             home_address=_normalize_text(data.get("home_address", "")),
+            emergency_contact=_normalize_text(data.get("emergency_contact", "")),
             certificates=normalize_certificates(data.get("certificates", [])),
             avatar=data.get("avatar", ""),
             join_date=data.get("join_date", ""),
@@ -402,6 +405,7 @@ class EmployeeSystem:
             id_number=_normalize_text(payload.get("id_number")),
             birthday=_validate_iso_date(payload.get("birthday"), "生日"),
             home_address=_normalize_text(payload.get("home_address")),
+            emergency_contact=_normalize_text(payload.get("emergency_contact")),
             certificates=normalize_certificates(payload.get("certificates")),
             avatar="👤",
             permissions=self._normalize_permissions(payload.get("permissions"), department),
@@ -428,6 +432,7 @@ class EmployeeSystem:
         user.id_number = _normalize_text(payload.get("id_number", user.id_number))
         user.birthday = _validate_iso_date(payload.get("birthday", user.birthday), "生日")
         user.home_address = _normalize_text(payload.get("home_address", user.home_address))
+        user.emergency_contact = _normalize_text(payload.get("emergency_contact", user.emergency_contact))
         user.certificates = normalize_certificates(payload.get("certificates", user.certificates))
         user.permissions = self._normalize_permissions(payload.get("permissions", user.permissions), user.department)
 
@@ -449,6 +454,7 @@ class EmployeeSystem:
         user.id_number = _normalize_text(payload.get("id_number", user.id_number))
         user.birthday = _validate_iso_date(payload.get("birthday", user.birthday), "生日")
         user.home_address = _normalize_text(payload.get("home_address", user.home_address))
+        user.emergency_contact = _normalize_text(payload.get("emergency_contact", user.emergency_contact))
         user.certificates = normalize_certificates(payload.get("certificates", user.certificates))
 
         self.save_data()
