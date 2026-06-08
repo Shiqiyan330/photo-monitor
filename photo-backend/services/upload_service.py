@@ -148,6 +148,15 @@ def _read_metadata(base: Path) -> dict:
         return {}
 
 
+def read_uploaded_departments(base: Path) -> list[str]:
+    departments = []
+    for item in _read_metadata(base).values():
+        department = (item.get("department") or "").strip() if isinstance(item, dict) else ""
+        if department:
+            departments.append(department)
+    return list(dict.fromkeys(departments))
+
+
 def _write_metadata(base: Path, metadata: dict) -> None:
     import json
 

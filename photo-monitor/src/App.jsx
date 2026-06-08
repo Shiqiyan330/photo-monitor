@@ -1,16 +1,20 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   createEmployee,
+  createDepartment,
   deleteCompanyFile,
+  deleteDepartment,
   deleteEmployee,
   deleteLedger,
   deleteStudyArticle,
   fetchLedgers,
+  fetchDepartments,
   fetchEmployees,
   fetchStructureEmployees,
   fetchStudyArticles,
   fetchUploadedFiles,
   updateEmployee,
+  renameDepartment,
   uploadCompanyFile,
   uploadLedger,
   uploadStudyArticle,
@@ -19,6 +23,7 @@ import {
   viewUploadedFile,
 } from "./api"
 import ChangePasswordModal from "./components/ChangePasswordModal"
+import DepartmentManagerPage from "./components/DepartmentManagerPage"
 import EmployeeManagerPage from "./components/EmployeeManagerPage"
 import LoginForm from "./components/LoginForm"
 import ProfileModal from "./components/ProfileModal"
@@ -37,6 +42,7 @@ import {
 
 const PAGE_DASHBOARD = "dashboard"
 const PAGE_EMPLOYEES = "employees"
+const PAGE_DEPARTMENTS = "departments"
 const PAGE_MONITOR = "monitor"
 const PAGE_DOCUMENTS = "documents"
 const PAGE_LEARNING = "learning"
@@ -151,6 +157,9 @@ function readCurrentPage() {
   if (route === PAGE_EMPLOYEES) {
     return PAGE_EMPLOYEES
   }
+  if (route === PAGE_DEPARTMENTS) {
+    return PAGE_DEPARTMENTS
+  }
 
   if (MODULES.some((module) => module.key === route)) {
     return route
@@ -225,6 +234,11 @@ function App() {
     setDepartments(data.departments)
   }, [])
 
+  const loadDepartments = useCallback(async () => {
+    const data = await fetchDepartments()
+    setDepartments(data.departments)
+  }, [])
+
   const loadStructureEmployees = useCallback(async () => {
     setStructureStatus("loading")
     setStructureError("")
@@ -262,9 +276,9 @@ function App() {
   }, [user])
 
   useEffect(() => {
-    if (!user || user.role !== "admin" || currentPage !== PAGE_EMPLOYEES) {
+    if (!user || user.role !== "admin" || (currentPage !== PAGE_EMPLOYEES && currentPage !== PAGE_DEPARTMENTS)) {
       const timer = window.setTimeout(() => {
-        if (currentPage === PAGE_EMPLOYEES) {
+        if (currentPage === PAGE_EMPLOYEES || currentPage === PAGE_DEPARTMENTS) {
           setEmployees([])
           setDepartments([])
           setRoute(PAGE_DASHBOARD)
@@ -273,9 +287,9 @@ function App() {
       return () => window.clearTimeout(timer)
     }
 
-    const timer = window.setTimeout(loadEmployees, 0)
+    const timer = window.setTimeout(currentPage === PAGE_EMPLOYEES ? loadEmployees : loadDepartments, 0)
     return () => window.clearTimeout(timer)
-  }, [currentPage, loadEmployees, user])
+  }, [currentPage, loadDepartments, loadEmployees, user])
 
   useEffect(() => {
     if (!user || currentPage !== PAGE_STRUCTURE || !canReadStructure(user)) {
@@ -335,9 +349,33 @@ function App() {
     showBanner("员工已删除")
   }
 
+  const handleCreateDepartment = async (payload) => {
+    const result = await createDepartment(payload)
+    setDepartments(result.departments)
+    showBanner("部门已新增")
+  }
+
+  const handleRenameDepartment = async (name, payload) => {
+    const result = await renameDepartment(name, payload)
+    setDepartments(result.departments)
+    await loadEmployees()
+    showBanner("部门已改名")
+  }
+
+  const handleDeleteDepartment = async (name) => {
+    const result = await deleteDepartment(name)
+    setDepartments(result.departments)
+    showBanner("部门已删除")
+  }
+
   const openEmployeePage = () => {
     setCurrentPage(PAGE_EMPLOYEES)
     setRoute(PAGE_EMPLOYEES)
+  }
+
+  const openDepartmentPage = () => {
+    setCurrentPage(PAGE_DEPARTMENTS)
+    setRoute(PAGE_DEPARTMENTS)
   }
 
   const openDashboardPage = () => {
@@ -384,6 +422,7 @@ function App() {
           modules={accessibleModules}
           onOpenModule={openModulePage}
           onOpenEmployees={openEmployeePage}
+          onOpenDepartments={openDepartmentPage}
           onOpenPassword={() => setPasswordModalOpen(true)}
           onOpenProfile={() => setProfileModalOpen(true)}
           onLogout={handleLogout}
@@ -412,6 +451,30 @@ function App() {
           onCreate={handleCreateEmployee}
           onUpdate={handleUpdateEmployee}
           onDelete={handleDeleteEmployee}
+        />
+
+        {passwordModalOpen ? (
+          <ChangePasswordModal
+            onClose={() => setPasswordModalOpen(false)}
+            onSubmit={handleChangePassword}
+          />
+        ) : null}
+        {profileModal}
+      </div>
+    )
+  }
+
+  if (currentPage === PAGE_DEPARTMENTS && user.role === "admin") {
+    return (
+      <div className="app-shell admin-page-shell">
+        {bannerMessage ? <div className="status-card success-card">{bannerMessage}</div> : null}
+
+        <DepartmentManagerPage
+          departments={departments}
+          onBack={openDashboardPage}
+          onCreate={handleCreateDepartment}
+          onRename={handleRenameDepartment}
+          onDelete={handleDeleteDepartment}
         />
 
         {passwordModalOpen ? (

@@ -277,6 +277,10 @@ export function fetchEmployees() {
   return request("/admin/employees")
 }
 
+export function fetchDepartments() {
+  return request("/admin/departments")
+}
+
 export function fetchStructureEmployees() {
   return request("/structure/employees").then((payload) =>
     requireArrayPayload(payload, ["employees", "departments"], "Structure employees"),
@@ -299,6 +303,26 @@ export function updateEmployee(username, payload) {
 
 export function deleteEmployee(username) {
   return request(`/admin/employees/${encodeURIComponent(username)}`, {
+    method: "DELETE",
+  })
+}
+
+export function createDepartment(payload) {
+  return request("/admin/departments", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+}
+
+export function renameDepartment(name, payload) {
+  return request(`/admin/departments/${encodeURIComponent(name)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteDepartment(name) {
+  return request(`/admin/departments/${encodeURIComponent(name)}`, {
     method: "DELETE",
   })
 }

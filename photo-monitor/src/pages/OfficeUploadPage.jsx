@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { downloadFile, getAssetUrl } from "../api"
 import useOfficeUploads from "../hooks/useOfficeUploads"
+import { buildOfficeDepartmentOptions, filterOfficeItems } from "../officeFilters"
 import { getDepartmentViewOptions, hasAnyMatrixAction, hasMatrixPermission } from "../permissions"
 import { BrandMark } from "./DashboardPage"
 
@@ -123,14 +124,38 @@ function UploadPanel({ title, description, departmentOptions, onSubmit, submitti
   )
 }
 
-function UploadList({ title, items, emptyText, onDelete, onDownload, onView, canDeleteItem }) {
+function UploadSearchBar({ department, title, departmentOptions, onDepartmentChange, onTitleChange }) {
+  return (
+    <section className="office-search-bar" aria-label="文件筛选">
+      <label className="field">
+        <span>部门</span>
+        <select value={department} onChange={(event) => onDepartmentChange(event.target.value)}>
+          <option value="">全部部门</option>
+          {departmentOptions.map((item) => (
+            <option key={item} value={item}>
+              {item}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label className="field office-search-title-field">
+        <span>标题</span>
+        <input value={title} onChange={(event) => onTitleChange(event.target.value)} placeholder="搜索文件标题" />
+      </label>
+    </section>
+  )
+}
+
+function UploadList({ title, items, totalCount, emptyText, onDelete, onDownload, onView, canDeleteItem }) {
   return (
     <section className="office-panel">
       <div className="panel-header">
         <div>
           <h3>{title}</h3>
         </div>
-        <span className="file-count-badge">{items.length} 个文件</span>
+        <span className="file-count-badge">
+          {items.length} / {totalCount} 个文件
+        </span>
       </div>
 
       {items.length ? (
@@ -176,6 +201,8 @@ function UploadList({ title, items, emptyText, onDelete, onDownload, onView, can
 export default function OfficeUploadPage({ config, departments, onBack, showBanner, user }) {
   const departmentOptions = getDepartmentViewOptions(user, departments, config.system, "create").filter(Boolean)
   const canUpload = hasAnyMatrixAction(user, config.system, ["create"])
+  const [searchDepartment, setSearchDepartment] = useState("")
+  const [searchTitle, setSearchTitle] = useState("")
   const { items, loading, uploading, error, loadItems, upload, remove } = useOfficeUploads({
     fetchItems: config.fetchItems,
     uploadItem: config.uploadItem,
@@ -183,6 +210,14 @@ export default function OfficeUploadPage({ config, departments, onBack, showBann
     successMessages: config.messages,
     showBanner,
   })
+  const searchDepartmentOptions = useMemo(
+    () => buildOfficeDepartmentOptions(departments, items),
+    [departments, items],
+  )
+  const filteredItems = useMemo(
+    () => filterOfficeItems(items, { department: searchDepartment, title: searchTitle }),
+    [items, searchDepartment, searchTitle],
+  )
 
   const handleView = async (item) => {
     if (!item.id) {
@@ -236,10 +271,19 @@ export default function OfficeUploadPage({ config, departments, onBack, showBann
         </section>
       ) : null}
 
+      <UploadSearchBar
+        department={searchDepartment}
+        title={searchTitle}
+        departmentOptions={searchDepartmentOptions}
+        onDepartmentChange={setSearchDepartment}
+        onTitleChange={setSearchTitle}
+      />
+
       <UploadList
         title={config.listTitle}
-        items={items}
-        emptyText={config.emptyText}
+        items={filteredItems}
+        totalCount={items.length}
+        emptyText={items.length ? "没有匹配的文件。" : config.emptyText}
         onDelete={handleDelete}
         onDownload={handleDownload}
         onView={handleView}

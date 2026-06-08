@@ -15,6 +15,7 @@ export default function DashboardPage({
   modules,
   onOpenModule,
   onOpenEmployees,
+  onOpenDepartments,
   onOpenPassword,
   onOpenProfile,
   onLogout,
@@ -43,6 +44,11 @@ export default function DashboardPage({
             {user.role === "admin" ? (
               <button type="button" className="ghost-button" onClick={onOpenEmployees}>
                 员工管理
+              </button>
+            ) : null}
+            {user.role === "admin" ? (
+              <button type="button" className="ghost-button" onClick={onOpenDepartments}>
+                部门管理
               </button>
             ) : null}
             <button type="button" className="ghost-button" onClick={onLogout}>

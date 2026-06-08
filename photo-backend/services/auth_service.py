@@ -380,6 +380,37 @@ class EmployeeSystem:
             departments.update(extract_permission_departments(user.permissions))
         return sorted(departments)
 
+    def department_is_used(self, department: str) -> bool:
+        normalized = _normalize_department_name(department)
+        if not normalized:
+            return False
+        for user in self.get_all_employees():
+            if user.department == normalized:
+                return True
+            if normalized in extract_permission_departments(user.permissions):
+                return True
+        return False
+
+    def rename_department(self, old_name: str, new_name: str) -> None:
+        old_normalized = _normalize_department_name(old_name)
+        new_normalized = _normalize_department_name(new_name)
+        if not old_normalized or not new_normalized:
+            raise ValueError("部门名称不能为空")
+
+        for user in self.get_all_employees():
+            if user.department == old_normalized:
+                user.department = new_normalized
+            next_permissions = []
+            for permission in user.permissions:
+                parsed = parse_matrix_permission(permission)
+                if parsed and parsed[1] == old_normalized:
+                    next_permissions.append(build_matrix_permission(parsed[0], new_normalized, parsed[2]))
+                else:
+                    next_permissions.append(permission)
+            user.permissions = list(dict.fromkeys(next_permissions))
+
+        self.save_data()
+
     def create_employee(self, payload: dict) -> User:
         phone = (payload.get("phone") or "").strip()
         username = (payload.get("username") or phone).strip()
