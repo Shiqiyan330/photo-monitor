@@ -3,6 +3,8 @@ services:
     build:
       context: ./photo-backend
     container_name: photo-backend
+    env_file:
+      - .env
     expose:
       - "8000"
     volumes:

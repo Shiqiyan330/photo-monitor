@@ -1,5 +1,6 @@
+import logging
 from pathlib import Path
-from datetime import date
+from datetime import date, datetime
 
 import pytest
 
@@ -207,6 +208,40 @@ def test_sms_dry_run_logs_success_once(tmp_path):
     assert first["sent"][0]["dry_run"] is True
     assert second["skipped"][0]["reason"] == "already_sent"
     assert len(logs) == 1
+
+
+def test_sms_scheduler_tick_logs_scan_result(caplog, monkeypatch):
+    import services.sms_service as sms_service
+
+    class DummyUser:
+        def to_public_dict(self):
+            return {"username": "worker", "phone": "13800000000", "name": "Worker"}
+
+    class DummyEmployeeSystem:
+        def get_all_employees(self):
+            return [DummyUser()]
+
+    calls = []
+
+    def fake_run_due_reminders(employees):
+        calls.append(employees)
+        return {"sent": [{}], "skipped": [], "failed": []}
+
+    monkeypatch.setattr(sms_service, "run_due_reminders", fake_run_due_reminders)
+    caplog.set_level(logging.INFO, logger="services.sms_service")
+
+    state = {"last_run_date": ""}
+    ran = sms_service._run_scheduler_tick(
+        DummyEmployeeSystem(),
+        state,
+        now=datetime(2026, 6, 8, 9, 0),
+        settings=SmsSettings(daily_send_time="09:00"),
+    )
+
+    assert ran is True
+    assert len(calls) == 1
+    assert state["last_run_date"] == "2026-06-08"
+    assert "SMS reminder scan completed" in caplog.text
 
 
 def test_admin_sms_endpoints_require_admin(tmp_path, monkeypatch):

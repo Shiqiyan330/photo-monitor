@@ -1,12 +1,16 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 import time
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -192,17 +196,39 @@ def run_due_reminders(
     return result
 
 
+def _run_scheduler_tick(employee_system, state: dict, now: datetime | None = None, settings: SmsSettings | None = None) -> bool:
+    settings = settings or load_sms_settings()
+    now = now or datetime.now()
+    today_text = now.date().isoformat()
+    if now.strftime("%H:%M") != settings.daily_send_time or state["last_run_date"] == today_text:
+        return False
+
+    try:
+        result = run_due_reminders([user.to_public_dict() for user in employee_system.get_all_employees()])
+    except Exception:
+        logger.exception("SMS reminder scan failed")
+        return False
+
+    state["last_run_date"] = today_text
+    logger.info(
+        "SMS reminder scan completed: sent=%s skipped=%s failed=%s",
+        len(result.get("sent", [])),
+        len(result.get("skipped", [])),
+        len(result.get("failed", [])),
+    )
+    return True
+
+
 def start_sms_scheduler(employee_system) -> None:
     state = {"last_run_date": ""}
 
     def run_loop() -> None:
         while True:
-            settings = load_sms_settings()
-            now = datetime.now()
-            today_text = now.date().isoformat()
-            if now.strftime("%H:%M") == settings.daily_send_time and state["last_run_date"] != today_text:
-                run_due_reminders([user.to_public_dict() for user in employee_system.get_all_employees()])
-                state["last_run_date"] = today_text
+            try:
+                _run_scheduler_tick(employee_system, state)
+            except Exception:
+                logger.exception("SMS scheduler loop failed")
             time.sleep(60)
 
+    logger.info("SMS scheduler started")
     threading.Thread(target=run_loop, daemon=True).start()
