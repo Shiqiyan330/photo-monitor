@@ -296,6 +296,8 @@ class User:
             "department_permissions": extract_permission_departments(self.permissions),
             "permission_matrix": self.permissions,
         }
+        if include_sensitive:
+            payload["password_display"] = "已加密，无法查看" if is_hashed_password(self.password) else self.password
         return payload
 
     @classmethod

@@ -53,6 +53,9 @@ export default function MonitorPage({
             {(user.role === "admin" ? "管理员" : user.department || "员工") + " / " + user.username}
           </div>
           <div className="user-actions">
+            <button type="button" className="ghost-button" onClick={onRefresh} disabled={loadingPhotos}>
+              {loadingPhotos ? "刷新中..." : "刷新列表"}
+            </button>
             <button type="button" className="ghost-button" onClick={onBack}>
               返回工作台
             </button>
@@ -78,8 +81,6 @@ export default function MonitorPage({
             setStartTime={setStartTime}
             endTime={endTime}
             setEndTime={setEndTime}
-            onRefresh={onRefresh}
-            loading={loadingPhotos}
           />
 
           {photoError ? <div className="status-card error-card">{photoError}</div> : null}

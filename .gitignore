@@ -5,5 +5,8 @@ photo-backend/.thumbnails
 photo-backend/__pycache__/
 photo-backend/**/__pycache__/
 photo-backend/.pytest_cache/
+__pycache__/
+**/__pycache__/
+*.pyc
 photo-monitor/dist/
 photo-monitor/node_modules/

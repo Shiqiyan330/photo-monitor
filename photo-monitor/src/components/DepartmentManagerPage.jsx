@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { BrandMark } from "../pages/DashboardPage"
 
 export default function DepartmentManagerPage({
   departments,
@@ -74,12 +75,7 @@ export default function DepartmentManagerPage({
     <section className="admin-page">
       <div className="admin-page-header">
         <div>
-          <div className="brand-mark compact">
-            <div className="brand-logo-slot" aria-hidden="true" />
-            <div>
-              <div className="brand-name">越岚索道</div>
-            </div>
-          </div>
+          <BrandMark compact />
           <h2>部门管理</h2>
         </div>
         <button type="button" className="ghost-button" onClick={onBack}>

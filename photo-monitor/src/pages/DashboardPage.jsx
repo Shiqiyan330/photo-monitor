@@ -1,10 +1,10 @@
-export function BrandMark({ compact = false }) {
+export function BrandMark({ compact = false, showSubtitle = true }) {
   return (
     <div className={compact ? "brand-mark compact" : "brand-mark"}>
       <div className="brand-logo-slot" aria-hidden="true" />
       <div>
         <div className="brand-name">越岚索道</div>
-        {!compact ? <div className="brand-subtitle">照片管理</div> : null}
+        {showSubtitle ? <div className="brand-subtitle">越无止境，一岚胜景</div> : null}
       </div>
     </div>
   )

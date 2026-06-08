@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react"
+import { BrandMark } from "../pages/DashboardPage"
 
 const DEFAULT_DEPARTMENTS = ["大茅山", "湄江", "雪峰山", "浙江之心", "总公司"]
 
@@ -7,6 +8,7 @@ const EMPTY_CERTIFICATE = { name: "", number: "", expires_at: "", note: "" }
 const EMPTY_FORM = {
   username: "",
   password: "",
+  password_display: "",
   phone: "",
   name: "",
   department: "",
@@ -237,6 +239,7 @@ export default function EmployeeManagerPage({
     setForm({
       username: employee.username,
       password: employee.password ?? "",
+      password_display: employee.password_display ?? "",
       phone: employee.phone ?? "",
       name: employee.name ?? "",
       department: employee.department ?? "",
@@ -318,8 +321,10 @@ export default function EmployeeManagerPage({
     setError("")
 
     try {
+      const editableForm = { ...form }
+      delete editableForm.password_display
       const payload = {
-        ...form,
+        ...editableForm,
         username: form.username.trim(),
         phone: form.phone.trim(),
         name: form.name.trim(),
@@ -367,12 +372,7 @@ export default function EmployeeManagerPage({
     <section className="admin-page">
       <div className="admin-page-header">
         <div>
-          <div className="brand-mark compact">
-            <div className="brand-logo-slot" aria-hidden="true" />
-            <div>
-              <div className="brand-name">越岚索道</div>
-            </div>
-          </div>
+          <BrandMark compact />
           <h2>员工管理</h2>
         </div>
         <button type="button" className="ghost-button" onClick={onBack}>
@@ -491,7 +491,16 @@ export default function EmployeeManagerPage({
                   />
                 </label>
                 <label className="field">
-                  <span>密码</span>
+                  <span>当前密码</span>
+                  <input
+                    type="text"
+                    value={form.password_display}
+                    readOnly
+                    placeholder="新增后保存密码"
+                  />
+                </label>
+                <label className="field">
+                  <span>重置密码</span>
                   <input
                     type="text"
                     value={form.password}

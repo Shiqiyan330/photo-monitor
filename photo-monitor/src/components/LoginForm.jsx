@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { BrandMark } from "../pages/DashboardPage"
 
 export default function LoginForm({ onSubmit, serverMessage }) {
   const [username, setUsername] = useState("")
@@ -23,14 +24,10 @@ export default function LoginForm({ onSubmit, serverMessage }) {
   return (
     <section className="login-layout">
       <div className="login-intro">
-        <div className="brand-mark">
-          <div className="brand-logo-slot" aria-hidden="true" />
-          <div>
-            <div className="brand-name">越岚索道</div>
-            <div className="brand-subtitle">照片管理</div>
-          </div>
+        <div className="login-brand-lockup">
+          <BrandMark showSubtitle={false} />
         </div>
-        <h1 className="login-title">照片管理</h1>
+        <p className="brand-slogan">越无止境，一岚胜景</p>
       </div>
 
       <form className="login-card" onSubmit={handleSubmit}>
@@ -41,7 +38,7 @@ export default function LoginForm({ onSubmit, serverMessage }) {
           <input
             value={username}
             onChange={(event) => setUsername(event.target.value)}
-            placeholder="手机号或管理员账号"
+            placeholder="输入账号"
             autoComplete="username"
             required
           />

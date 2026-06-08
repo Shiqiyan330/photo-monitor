@@ -23,6 +23,30 @@ def patch_employee_system(monkeypatch, system: EmployeeSystem) -> None:
 
 def test_admin_employee_payloads_do_not_expose_passwords(tmp_path, monkeypatch):
     system = make_employee_system(tmp_path)
+    user = system.create_employee(
+        {
+            "username": "worker",
+            "password": "secret123",
+            "department": "ops",
+            "permissions": [build_matrix_permission("photos", "ops", "read")],
+        }
+    )
+    user.password = "secret123"
+    system.save_data()
+    patch_employee_system(monkeypatch, system)
+
+    token = system.create_access_token("admin")
+    client = TestClient(app)
+    response = client.get("/admin/employees", headers={"Authorization": f"Bearer {token}"})
+
+    assert response.status_code == 200
+    employee = response.json()["employees"][0]
+    assert "password" not in employee
+    assert employee["password_display"] == "secret123"
+
+
+def test_admin_employee_payload_marks_hashed_password_as_hidden(tmp_path, monkeypatch):
+    system = make_employee_system(tmp_path)
     system.create_employee(
         {
             "username": "worker",
@@ -40,6 +64,7 @@ def test_admin_employee_payloads_do_not_expose_passwords(tmp_path, monkeypatch):
     assert response.status_code == 200
     employee = response.json()["employees"][0]
     assert "password" not in employee
+    assert employee["password_display"] == "已加密，无法查看"
 
 
 def test_legacy_plaintext_password_is_migrated_after_login(tmp_path):

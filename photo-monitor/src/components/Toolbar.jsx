@@ -19,8 +19,6 @@ export default function Toolbar({
   setStartTime,
   endTime,
   setEndTime,
-  onRefresh,
-  loading,
 }) {
   return (
     <section className="toolbar">
@@ -100,16 +98,13 @@ export default function Toolbar({
         ) : null}
       </div>
 
-      <div className="toolbar-actions">
-        <a className="ghost-button icon-button-text" href="/downloads/photo-monitor-uploader.ps1" download>
+      <div className="toolbar-actions compact-upload-actions">
+        <a className="ghost-button icon-button-text compact-upload-button" href="/downloads/photo-monitor-uploader.exe" download>
           <span className="material-symbols-outlined button-icon" aria-hidden="true">
             download
           </span>
           下载上传程序
         </a>
-        <button type="button" className="ghost-button" onClick={onRefresh} disabled={loading}>
-          {loading ? "刷新中..." : "刷新列表"}
-        </button>
       </div>
     </section>
   )
