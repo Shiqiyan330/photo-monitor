@@ -1,6 +1,8 @@
 import shutil
 import tempfile
 import unittest
+import json
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -9,6 +11,14 @@ WORKSPACE_TEMP.mkdir(exist_ok=True)
 tempfile.tempdir = str(WORKSPACE_TEMP)
 
 from uploader import config as uploader_config
+
+
+def make_case_dir(name: str) -> Path:
+    path = WORKSPACE_TEMP / name
+    if path.exists():
+        shutil.rmtree(path, ignore_errors=True)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 class ConfigTests(unittest.TestCase):
@@ -59,6 +69,106 @@ class ConfigTests(unittest.TestCase):
             fake_keyring.set_password.assert_called_once_with("PhotoMonitorUploader", "alice", "secret")
             fake_keyring.get_password.return_value = "secret"
             self.assertEqual(uploader_config.load_password("alice"), "secret")
+
+
+from uploader import api_client, scanner
+
+
+class ScannerTests(unittest.TestCase):
+    def tearDown(self):
+        for child in WORKSPACE_TEMP.iterdir():
+            if child.is_dir():
+                shutil.rmtree(child, ignore_errors=True)
+            else:
+                child.unlink(missing_ok=True)
+
+    def test_resolve_photo_station_uses_known_folder_name(self):
+        path = Path("C:/photos/HQ/xiazhan/image.jpg")
+        self.assertEqual(scanner.resolve_photo_station("uploads", path), "xiazhan")
+
+    def test_iter_watched_files_filters_extensions_and_subdirectories(self):
+        root = make_case_dir("iter_watched_files")
+        (root / "a.jpg").write_bytes(b"a")
+        (root / "b.txt").write_bytes(b"b")
+        (root / "nested").mkdir()
+        (root / "nested" / "c.png").write_bytes(b"c")
+
+        recursive = [item.name for item in scanner.iter_watched_files(root, include_subdirectories=True)]
+        flat = [item.name for item in scanner.iter_watched_files(root, include_subdirectories=False)]
+
+        self.assertEqual(recursive, ["a.jpg", "c.png"])
+        self.assertEqual(flat, ["a.jpg"])
+
+    def test_state_recorder_adds_uploaded_file_key(self):
+        root = make_case_dir("state_recorder")
+        photo = root / "photo.jpg"
+        photo.write_bytes(b"photo")
+        state = {}
+        scanner.record_uploaded_file(
+            state,
+            photo,
+            station="uploads",
+            result={"item": {"name": "photo.jpg"}},
+            uploaded_at=datetime(2026, 6, 30, tzinfo=timezone.utc),
+        )
+        key = scanner.file_key(photo)
+        self.assertEqual(state[key]["station"], "uploads")
+        self.assertEqual(state[key]["server_item"], {"name": "photo.jpg"})
+
+
+class ApiClientTests(unittest.TestCase):
+    def test_request_json_reports_server_detail(self):
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return json.dumps({"detail": "No permission"}).encode("utf-8")
+
+            def close(self):
+                return None
+
+        error = api_client.urllib.error.HTTPError(
+            url="http://example.com/uploads",
+            code=403,
+            msg="Forbidden",
+            hdrs=None,
+            fp=FakeResponse(),
+        )
+        with mock.patch("urllib.request.urlopen", side_effect=error):
+            with self.assertRaisesRegex(uploader_config.UploaderError, "No permission"):
+                api_client.request_json("http://example.com/uploads")
+
+    def test_upload_file_reports_server_detail(self):
+        class FakeResponse:
+            status = 400
+
+            def read(self):
+                return json.dumps({"detail": "No permission"}).encode("utf-8")
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+        root = make_case_dir("upload_file")
+        path = root / "photo.jpg"
+        path.write_bytes(b"photo")
+        config = uploader_config.UploaderConfig(
+            server="http://example.com",
+            token="token",
+            username="admin",
+            department="HQ",
+            station="uploads",
+            watch_dir=str(path.parent),
+        )
+        with mock.patch("urllib.request.urlopen", return_value=FakeResponse()):
+            with self.assertRaisesRegex(uploader_config.UploaderError, "No permission"):
+                api_client.upload_file(config, path)
 
 
 if __name__ == "__main__":

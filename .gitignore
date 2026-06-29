@@ -8,5 +8,6 @@ photo-backend/.pytest_cache/
 __pycache__/
 **/__pycache__/
 *.pyc
+.photo-monitor-uploader-test/
 photo-monitor/dist/
 photo-monitor/node_modules/
