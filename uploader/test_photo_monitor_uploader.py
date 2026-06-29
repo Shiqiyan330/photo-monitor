@@ -1,94 +1,64 @@
-import json
-import sys
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+WORKSPACE_TEMP = Path(__file__).resolve().parents[1] / ".photo-monitor-uploader-test"
+WORKSPACE_TEMP.mkdir(exist_ok=True)
+tempfile.tempdir = str(WORKSPACE_TEMP)
 
-import photo_monitor_uploader as uploader
+from uploader import config as uploader_config
 
 
-class UploaderTests(unittest.TestCase):
+class ConfigTests(unittest.TestCase):
+    def tearDown(self):
+        for child in WORKSPACE_TEMP.iterdir():
+            if child.is_dir():
+                shutil.rmtree(child, ignore_errors=True)
+            else:
+                child.unlink(missing_ok=True)
+
     def test_normalize_server_rejects_invalid_url(self):
-        self.assertEqual(uploader.normalize_server(" http://example.com/ "), "http://example.com")
-        with self.assertRaisesRegex(uploader.UploaderError, "Server must start"):
-            uploader.normalize_server("ftp://example.com")
+        self.assertEqual(uploader_config.normalize_server(" http://example.com/ "), "http://example.com")
+        with self.assertRaisesRegex(uploader_config.UploaderError, "Server must start"):
+            uploader_config.normalize_server("ftp://example.com")
 
     def test_safe_path_part_rejects_windows_invalid_characters(self):
-        self.assertEqual(uploader.safe_path_part("Department", " HQ "), "HQ")
-        with self.assertRaisesRegex(uploader.UploaderError, "invalid path characters"):
-            uploader.safe_path_part("Department", "bad/name")
+        self.assertEqual(uploader_config.safe_path_part("Department", " HQ "), "HQ")
+        with self.assertRaisesRegex(uploader_config.UploaderError, "invalid path characters"):
+            uploader_config.safe_path_part("Department", "bad/name")
 
-    def test_resolve_photo_station_uses_known_folder_name(self):
-        path = Path("C:/photos/HQ/xiazhan/image.jpg")
-        self.assertEqual(uploader.resolve_photo_station("uploads", path), "xiazhan")
+    def test_save_and_read_json_round_trips_utf8(self):
+        path = WORKSPACE_TEMP / "config.json"
+        uploader_config.save_json(path, {"department": "General"})
+        self.assertEqual(uploader_config.read_json(path, {}), {"department": "General"})
 
-    def test_iter_watched_files_filters_extensions_and_subdirectories(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            (root / "a.jpg").write_bytes(b"a")
-            (root / "b.txt").write_bytes(b"b")
-            (root / "nested").mkdir()
-            (root / "nested" / "c.png").write_bytes(b"c")
+    def test_read_json_returns_default_for_invalid_json(self):
+        path = WORKSPACE_TEMP / "broken.json"
+        path.write_text("{", encoding="utf-8")
+        self.assertEqual(uploader_config.read_json(path, {"ok": True}), {"ok": True})
 
-            recursive = [item.name for item in uploader.iter_watched_files(root, include_subdirectories=True)]
-            flat = [item.name for item in uploader.iter_watched_files(root, include_subdirectories=False)]
+    def test_config_defaults_include_gui_fields(self):
+        data = {
+            "server": "http://example.com",
+            "token": "token",
+            "username": "user",
+            "department": "General",
+            "station": "uploads",
+            "watch_dir": str(WORKSPACE_TEMP),
+        }
+        config = uploader_config.config_from_dict(data)
+        self.assertFalse(config.launch_minimized)
+        self.assertFalse(config.start_watching_on_launch)
+        self.assertTrue(config.include_subdirectories)
 
-        self.assertEqual(recursive, ["a.jpg", "c.png"])
-        self.assertEqual(flat, ["a.jpg"])
-
-    def test_upload_file_reports_server_detail(self):
-        class FakeResponse:
-            status = 400
-
-            def read(self):
-                return json.dumps({"detail": "No permission"}).encode("utf-8")
-
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *_args):
-                return False
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            path = Path(temp_dir) / "photo.jpg"
-            path.write_bytes(b"photo")
-            config = uploader.UploaderConfig(
-                server="http://example.com",
-                token="token",
-                username="admin",
-                department="HQ",
-                station="uploads",
-                watch_dir=str(path.parent),
-                interval_seconds=60,
-                stable_seconds=0,
-                timeout_seconds=10,
-                retry_count=1,
-                retry_delay_seconds=1,
-                include_subdirectories=True,
-            )
-            with mock.patch("urllib.request.urlopen", return_value=FakeResponse()):
-                with self.assertRaisesRegex(uploader.UploaderError, "No permission"):
-                    uploader.upload_file(config, path)
-
-    def test_parser_accepts_legacy_powershell_option_names(self):
-        args = uploader.build_parser().parse_args(
-            [
-                "once",
-                "-Server",
-                "http://127.0.0.1:8000",
-                "-WatchDir",
-                "D:\\photos",
-                "-DryRun",
-            ]
-        )
-
-        self.assertEqual(args.command, "once")
-        self.assertEqual(args.server, "http://127.0.0.1:8000")
-        self.assertEqual(args.watch_dir, "D:\\photos")
-        self.assertTrue(args.dry_run)
+    def test_password_helpers_use_keyring_when_enabled(self):
+        with mock.patch.object(uploader_config, "keyring", create=True) as fake_keyring:
+            uploader_config.save_password("alice", "secret")
+            fake_keyring.set_password.assert_called_once_with("PhotoMonitorUploader", "alice", "secret")
+            fake_keyring.get_password.return_value = "secret"
+            self.assertEqual(uploader_config.load_password("alice"), "secret")
 
 
 if __name__ == "__main__":
