@@ -171,5 +171,71 @@ class ApiClientTests(unittest.TestCase):
                 api_client.upload_file(config, path)
 
 
+from uploader import cli, worker
+
+
+class WorkerTests(unittest.TestCase):
+    def tearDown(self):
+        for child in WORKSPACE_TEMP.iterdir():
+            if child.is_dir():
+                shutil.rmtree(child, ignore_errors=True)
+            else:
+                child.unlink(missing_ok=True)
+
+    def test_scan_once_uploads_matching_stable_file(self):
+        root = make_case_dir("scan_once")
+        photo = root / "photo.jpg"
+        photo.write_bytes(b"photo")
+        config = uploader_config.UploaderConfig(
+            server="http://example.com",
+            token="token",
+            username="admin",
+            department="HQ",
+            station="uploads",
+            watch_dir=str(root),
+            stable_seconds=0,
+        )
+        events = []
+        state = {}
+
+        result = worker.scan_once(
+            config,
+            state,
+            upload=lambda _config, path: {"item": {"name": path.name}},
+            save_state=lambda value: events.append(("save", len(value))),
+            log=lambda message: events.append(("log", message)),
+        )
+
+        self.assertEqual(result.uploaded, 1)
+        self.assertEqual(result.failed, 0)
+        self.assertTrue(any(item[0] == "save" for item in events))
+
+    def test_watch_controller_stop_sets_cancel_event(self):
+        controller = worker.WatchController(lambda cancelled: None)
+        controller.stop()
+        self.assertTrue(controller.cancelled.is_set())
+
+
+class CliTests(unittest.TestCase):
+    def test_parser_accepts_gui_and_legacy_powershell_option_names(self):
+        args = cli.build_parser().parse_args(
+            [
+                "once",
+                "-Server",
+                "http://127.0.0.1:8000",
+                "-WatchDir",
+                "D:\\photos",
+                "-DryRun",
+            ]
+        )
+        self.assertEqual(args.command, "once")
+        self.assertEqual(args.server, "http://127.0.0.1:8000")
+        self.assertEqual(args.watch_dir, "D:\\photos")
+        self.assertTrue(args.dry_run)
+
+        gui_args = cli.build_parser().parse_args(["gui"])
+        self.assertEqual(gui_args.command, "gui")
+
+
 if __name__ == "__main__":
     unittest.main()
