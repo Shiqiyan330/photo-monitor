@@ -237,5 +237,15 @@ class CliTests(unittest.TestCase):
         self.assertEqual(gui_args.command, "gui")
 
 
+class GuiTests(unittest.TestCase):
+    def test_gui_module_imports_or_reports_missing_pyside6(self):
+        try:
+            from uploader import gui
+        except ModuleNotFoundError as error:
+            self.assertIn("PySide6", str(error))
+            return
+        self.assertTrue(hasattr(gui, "main"))
+
+
 if __name__ == "__main__":
     unittest.main()
