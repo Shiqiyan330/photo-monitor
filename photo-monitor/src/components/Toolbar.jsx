@@ -99,7 +99,7 @@ export default function Toolbar({
       </div>
 
       <div className="toolbar-actions compact-upload-actions">
-        <a className="ghost-button icon-button-text compact-upload-button" href="/downloads/photo-monitor-uploader.exe" download>
+        <a className="ghost-button icon-button-text compact-upload-button" href="/downloads/photo-monitor-uploader.zip" download>
           <span className="material-symbols-outlined button-icon" aria-hidden="true">
             download
           </span>

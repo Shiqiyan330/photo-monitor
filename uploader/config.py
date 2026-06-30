@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import ipaddress
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -45,6 +46,7 @@ class UploaderConfig:
     target: str = "photo"
     launch_minimized: bool = False
     start_watching_on_launch: bool = False
+    verify_tls: bool = True
 
 
 def app_dir() -> Path:
@@ -74,7 +76,7 @@ def read_json(path: Path, default: Any) -> Any:
     if not path.exists():
         return default
     try:
-        with path.open("r", encoding="utf-8") as file:
+        with path.open("r", encoding="utf-8-sig") as file:
             return json.load(file)
     except (OSError, json.JSONDecodeError):
         return default
@@ -98,6 +100,20 @@ def normalize_server(value: str) -> str:
     return text
 
 
+def default_verify_tls(server: str) -> bool:
+    import urllib.parse
+
+    parsed = urllib.parse.urlparse(server)
+    if parsed.scheme != "https":
+        return True
+    host = parsed.hostname or ""
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return True
+    return False
+
+
 def safe_path_part(name: str, value: str) -> str:
     normalized = (value or "").strip()
     if not normalized:
@@ -114,8 +130,9 @@ def bounded_int(name: str, value: int, minimum: int, maximum: int) -> int:
 
 
 def config_from_dict(data: dict[str, Any]) -> UploaderConfig:
+    server = normalize_server(str(data["server"]))
     return UploaderConfig(
-        server=normalize_server(str(data["server"])),
+        server=server,
         token=str(data.get("token") or ""),
         username=str(data.get("username") or ""),
         department=safe_path_part("Department", str(data.get("department") or "")),
@@ -130,6 +147,7 @@ def config_from_dict(data: dict[str, Any]) -> UploaderConfig:
         target=str(data.get("target") or "photo"),
         launch_minimized=bool(data.get("launch_minimized", False)),
         start_watching_on_launch=bool(data.get("start_watching_on_launch", False)),
+        verify_tls=bool(data["verify_tls"]) if "verify_tls" in data else default_verify_tls(server),
     )
 
 

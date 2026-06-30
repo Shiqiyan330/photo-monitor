@@ -41,8 +41,13 @@ class ConfigTests(unittest.TestCase):
 
     def test_save_and_read_json_round_trips_utf8(self):
         path = WORKSPACE_TEMP / "config.json"
-        uploader_config.save_json(path, {"department": "General"})
-        self.assertEqual(uploader_config.read_json(path, {}), {"department": "General"})
+        uploader_config.save_json(path, {"department": "综合部"})
+        self.assertEqual(uploader_config.read_json(path, {}), {"department": "综合部"})
+
+    def test_read_json_accepts_utf8_bom_files_from_older_tools(self):
+        path = WORKSPACE_TEMP / "bom_config.json"
+        path.write_text('{"department": "综合部"}', encoding="utf-8-sig")
+        self.assertEqual(uploader_config.read_json(path, {}), {"department": "综合部"})
 
     def test_read_json_returns_default_for_invalid_json(self):
         path = WORKSPACE_TEMP / "broken.json"
@@ -54,7 +59,7 @@ class ConfigTests(unittest.TestCase):
             "server": "http://example.com",
             "token": "token",
             "username": "user",
-            "department": "General",
+            "department": "综合部",
             "station": "uploads",
             "watch_dir": str(WORKSPACE_TEMP),
         }
@@ -238,19 +243,54 @@ class WatchdogSelectionTests(unittest.TestCase):
 
 
 class BuildScriptTests(unittest.TestCase):
-    def test_windows_build_script_runs_tests_builds_and_copies_download(self):
+    def test_windows_build_script_packages_onedir_zip_with_clean_python_path(self):
         script = Path(__file__).with_name("build_windows.ps1")
         self.assertTrue(script.exists())
         content = script.read_text(encoding="utf-8")
+        self.assertIn("function Test-PythonForUploader", content)
+        self.assertIn("from PySide6.QtCore import qVersion", content)
+        self.assertIn("BundledPython", content)
+        self.assertIn("| Out-Host", content)
         self.assertIn('$Python = if ($env:PYTHON)', content)
         self.assertIn("& $Python -m unittest uploader.test_photo_monitor_uploader uploader.test_gui_operations", content)
-        self.assertIn("& $Python -m pip install --timeout 120", content)
+        self.assertIn("& $Candidate -m pip install --timeout 120", content)
         self.assertIn("if ($LASTEXITCODE -ne 0)", content)
         self.assertIn("& $Python -m PyInstaller", content)
-        self.assertIn("photo-monitor\\public\\downloads\\photo-monitor-uploader.exe", content)
+        self.assertIn("--clean", content)
+        self.assertIn("--onedir", content)
+        self.assertNotIn("--onefile", content)
+        self.assertNotIn("--runtime-tmpdir", content)
+        self.assertIn('$OriginalPath = $env:PATH', content)
+        self.assertIn('Join-Path $SitePackages "PySide6"', content)
+        self.assertIn('Join-Path $SitePackages "shiboken6"', content)
+        self.assertIn("$StaleDistExe", content)
+        self.assertIn("$StaleDebugExe", content)
+        self.assertIn("$DownloadDir", content)
+        self.assertIn("$StaleDownloadExe", content)
+        self.assertIn("Copy-Item -LiteralPath $PackageDir -Destination $DownloadDir", content)
+        self.assertIn("Compress-Archive", content)
+        self.assertIn("photo-monitor\\public\\downloads\\photo-monitor-uploader.zip", content)
+
+    def test_pyinstaller_specs_do_not_pin_relative_runtime_tmpdir(self):
+        root = Path(__file__).resolve().parents[1]
+        for spec in [root / "photo-monitor-uploader.spec", root / "photo-monitor-uploader-debug.spec"]:
+            self.assertTrue(spec.exists(), f"missing {spec.name}")
+            content = spec.read_text(encoding="utf-8")
+            self.assertNotIn("runtime_tmpdir='.'", content, spec.name)
 
 
 class CliTests(unittest.TestCase):
+    def test_write_log_falls_back_when_log_file_is_unavailable(self):
+        with (
+            mock.patch.object(Path, "open", side_effect=PermissionError("locked")),
+            mock.patch("builtins.print") as print_mock,
+        ):
+            cli.write_log("hello")
+
+        printed = "\n".join(str(call.args[0]) for call in print_mock.call_args_list if call.args)
+        self.assertIn("hello", printed)
+        self.assertIn("log write failed", printed)
+
     def test_parser_accepts_gui_and_legacy_powershell_option_names(self):
         args = cli.build_parser().parse_args(
             [

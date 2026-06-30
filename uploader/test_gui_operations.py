@@ -17,6 +17,10 @@ def make_case_dir(name: str) -> Path:
     return path
 
 try:
+    from uploader.qt_runtime import prepare_qt_runtime
+
+    prepare_qt_runtime()
+
     from PySide6.QtGui import QCloseEvent
     from PySide6.QtWidgets import QApplication
 
@@ -198,10 +202,30 @@ class GuiOperationTests(unittest.TestCase):
         self.app.processEvents()
         event = QCloseEvent()
 
-        self.window.closeEvent(event)
+        with mock.patch.object(gui.QSystemTrayIcon, "isSystemTrayAvailable", return_value=True):
+            self.window.closeEvent(event)
 
         self.assertFalse(event.isAccepted())
         self.assertFalse(self.window.isVisible())
+
+    def test_window_does_not_hide_when_system_tray_is_unavailable(self):
+        self.window.launch_minimized_input.setChecked(True)
+
+        with mock.patch.object(gui.QSystemTrayIcon, "isSystemTrayAvailable", return_value=False):
+            self.assertFalse(self.window.can_hide_to_tray())
+
+            self.window.show()
+            self.app.processEvents()
+            event = QCloseEvent()
+            self.window.closeEvent(event)
+
+        self.assertTrue(event.isAccepted())
+        self.assertTrue(self.window.allow_quit)
+
+    def test_manual_gui_launch_always_starts_with_main_window_visible(self):
+        self.window.launch_minimized_input.setChecked(True)
+
+        self.assertFalse(self.window.should_start_hidden())
 
 
 if __name__ == "__main__":

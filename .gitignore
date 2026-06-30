@@ -11,3 +11,9 @@ __pycache__/
 .photo-monitor-uploader-test/
 photo-monitor/dist/
 photo-monitor/node_modules/
+build/
+dist/
+.runtime-tmp/
+pyi-runtime/
+_MEI*/
+*.pyi-runtime.log

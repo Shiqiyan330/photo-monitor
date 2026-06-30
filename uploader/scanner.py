@@ -15,6 +15,8 @@ def file_key(path: Path) -> str:
 
 def is_stable_file(path: Path, stable_seconds: int) -> bool:
     stat = path.stat()
+    if stable_seconds <= 0:
+        return stat.st_size > 0
     return stat.st_size > 0 and (time.time() - stat.st_mtime) >= stable_seconds
 
 

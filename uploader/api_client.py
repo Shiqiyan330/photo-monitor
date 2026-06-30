@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import ssl
 import time
 import urllib.error
 import urllib.request
@@ -20,6 +21,23 @@ def _extract_http_detail(error: urllib.error.HTTPError) -> str:
         return payload
 
 
+def _ssl_context(verify_tls: bool) -> ssl.SSLContext | None:
+    if verify_tls:
+        return None
+    return ssl._create_unverified_context()
+
+
+def _network_error_message(error: urllib.error.URLError) -> str:
+    reason = error.reason
+    if isinstance(reason, ssl.SSLCertVerificationError):
+        return (
+            "HTTPS certificate verification failed. If the server is configured by IP address, "
+            "turn off HTTPS certificate verification in settings or use the domain name on the certificate. "
+            f"Detail: {reason}"
+        )
+    return f"network error: {reason}"
+
+
 def request_json(
     url: str,
     *,
@@ -27,6 +45,7 @@ def request_json(
     token: str | None = None,
     body: dict[str, Any] | None = None,
     timeout: int = 120,
+    verify_tls: bool = True,
 ) -> dict[str, Any]:
     data = None
     headers = {}
@@ -38,27 +57,33 @@ def request_json(
 
     request = urllib.request.Request(url, data=data, method=method, headers=headers)
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with urllib.request.urlopen(request, timeout=timeout, context=_ssl_context(verify_tls)) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as error:
         raise UploaderError(f"HTTP {error.code}: {_extract_http_detail(error)}") from error
     except urllib.error.URLError as error:
-        raise UploaderError(f"network error: {error.reason}") from error
+        raise UploaderError(_network_error_message(error)) from error
     except json.JSONDecodeError as error:
         raise UploaderError(f"server returned invalid JSON: {error}") from error
 
 
-def login(server: str, username: str, password: str, timeout_seconds: int) -> dict[str, Any]:
+def login(server: str, username: str, password: str, timeout_seconds: int, verify_tls: bool = True) -> dict[str, Any]:
     return request_json(
         f"{server}/auth/login",
         method="POST",
         body={"username": username, "password": password},
         timeout=timeout_seconds,
+        verify_tls=verify_tls,
     )
 
 
 def auth_me(config: UploaderConfig) -> dict[str, Any]:
-    payload = request_json(f"{config.server}/auth/me", token=config.token, timeout=config.timeout_seconds)
+    payload = request_json(
+        f"{config.server}/auth/me",
+        token=config.token,
+        timeout=config.timeout_seconds,
+        verify_tls=config.verify_tls,
+    )
     if not payload.get("authenticated"):
         raise UploaderError("login token rejected by server. Please log in again.")
     return payload
@@ -94,7 +119,11 @@ def upload_file(config: UploaderConfig, path: Path) -> dict[str, Any]:
         },
     )
     try:
-        with urllib.request.urlopen(request, timeout=config.timeout_seconds) as response:
+        with urllib.request.urlopen(
+            request,
+            timeout=config.timeout_seconds,
+            context=_ssl_context(config.verify_tls),
+        ) as response:
             payload = response.read().decode("utf-8")
             if response.status < 200 or response.status >= 300:
                 try:
@@ -106,7 +135,7 @@ def upload_file(config: UploaderConfig, path: Path) -> dict[str, Any]:
     except urllib.error.HTTPError as error:
         raise UploaderError(f"HTTP {error.code}: {_extract_http_detail(error)}") from error
     except urllib.error.URLError as error:
-        raise UploaderError(f"network error: {error.reason}") from error
+        raise UploaderError(_network_error_message(error)) from error
     except OSError as error:
         raise UploaderError(f"file read failed: {path} error={error}") from error
 

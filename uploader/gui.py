@@ -4,6 +4,10 @@ import os
 import sys
 from pathlib import Path
 
+from .qt_runtime import prepare_qt_runtime
+
+prepare_qt_runtime()
+
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
@@ -68,6 +72,7 @@ UI_TEXT = {
     "retry_delay": "重试等待（秒）",
     "start_on_launch": "启动后自动监听",
     "launch_minimized": "启动后最小化到托盘",
+    "verify_tls": "校验 HTTPS 证书（IP 地址证书不匹配时可关闭）",
     "actions": "操作",
     "login_save": "登录并保存",
     "save_settings": "保存设置",
@@ -174,6 +179,8 @@ class MainWindow(QMainWindow):
         self.retry_delay_input.setValue(5)
         self.start_on_launch_input = QCheckBox(UI_TEXT["start_on_launch"])
         self.launch_minimized_input = QCheckBox(UI_TEXT["launch_minimized"])
+        self.verify_tls_input = QCheckBox(UI_TEXT["verify_tls"])
+        self.verify_tls_input.setChecked(True)
 
         form.addRow(UI_TEXT["server"], self.server_input)
         form.addRow(UI_TEXT["username"], self.username_input)
@@ -195,6 +202,7 @@ class MainWindow(QMainWindow):
         form.addRow(UI_TEXT["retry_delay"], self.retry_delay_input)
         form.addRow("", self.start_on_launch_input)
         form.addRow("", self.launch_minimized_input)
+        form.addRow("", self.verify_tls_input)
         layout.addWidget(settings)
 
         actions = QGroupBox(UI_TEXT["actions"])
@@ -286,6 +294,7 @@ class MainWindow(QMainWindow):
         self.retry_delay_input.setValue(config.retry_delay_seconds)
         self.start_on_launch_input.setChecked(config.start_watching_on_launch)
         self.launch_minimized_input.setChecked(config.launch_minimized)
+        self.verify_tls_input.setChecked(config.verify_tls)
 
     def _config_from_form(self, token: str = "") -> UploaderConfig:
         return UploaderConfig(
@@ -302,6 +311,7 @@ class MainWindow(QMainWindow):
             include_subdirectories=self.include_subdirs_input.isChecked(),
             launch_minimized=self.launch_minimized_input.isChecked(),
             start_watching_on_launch=self.start_on_launch_input.isChecked(),
+            verify_tls=self.verify_tls_input.isChecked(),
         )
 
     def _saved_or_form_config(self) -> UploaderConfig:
@@ -349,7 +359,13 @@ class MainWindow(QMainWindow):
     def login_and_save(self) -> None:
         def task(log):
             config = self._config_from_form("")
-            payload = api_client.login(config.server, config.username, self.password_input.text(), config.timeout_seconds)
+            payload = api_client.login(
+                config.server,
+                config.username,
+                self.password_input.text(),
+                config.timeout_seconds,
+                verify_tls=config.verify_tls,
+            )
             user = payload.get("user") or {}
             config.token = str(payload["token"])
             config.username = str(user.get("username") or config.username)
@@ -447,6 +463,12 @@ class MainWindow(QMainWindow):
         self.raise_()
         self.activateWindow()
 
+    def can_hide_to_tray(self) -> bool:
+        return QSystemTrayIcon.isSystemTrayAvailable() and self.tray.isVisible()
+
+    def should_start_hidden(self) -> bool:
+        return False
+
     def quit_app(self) -> None:
         self.allow_quit = True
         self.stop_watching()
@@ -454,6 +476,10 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event: QCloseEvent) -> None:
         if self.allow_quit:
+            event.accept()
+            return
+        if not self.can_hide_to_tray():
+            self.allow_quit = True
             event.accept()
             return
         event.ignore()
@@ -465,7 +491,7 @@ def main() -> int:
     app = QApplication.instance() or QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     window = MainWindow()
-    if window.launch_minimized_input.isChecked():
+    if window.should_start_hidden() and window.can_hide_to_tray():
         window.hide()
     else:
         window.show()

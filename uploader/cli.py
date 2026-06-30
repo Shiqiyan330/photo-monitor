@@ -31,9 +31,12 @@ from .config import (
 
 def write_log(message: str) -> None:
     line = f"{datetime.now():%Y-%m-%d %H:%M:%S} {message}"
-    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with LOG_FILE.open("a", encoding="utf-8") as file:
-        file.write(line + "\n")
+    try:
+        LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with LOG_FILE.open("a", encoding="utf-8") as file:
+            file.write(line + "\n")
+    except OSError as error:
+        print(f"{datetime.now():%Y-%m-%d %H:%M:%S} log write failed: {error}", file=sys.stderr)
     print(line)
 
 
@@ -73,6 +76,7 @@ def login_command(args: argparse.Namespace) -> None:
         retry_count=args.retry_count,
         retry_delay_seconds=args.retry_delay_seconds,
         include_subdirectories=not args.no_subdirectories,
+        verify_tls=not args.no_verify_tls,
     )
     save_config(config)
     write_log(f"login ok: user={config.username} department={config.department} watch_dir={config.watch_dir}")
@@ -221,6 +225,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--retry-count", "-RetryCount", type=int, default=3)
     parser.add_argument("--retry-delay-seconds", "-RetryDelaySeconds", type=int, default=5)
     parser.add_argument("--no-subdirectories", "-NoSubdirectories", action="store_true")
+    parser.add_argument("--no-verify-tls", "-NoVerifyTls", action="store_true")
     parser.add_argument("--dry-run", "-DryRun", action="store_true")
     return parser
 
