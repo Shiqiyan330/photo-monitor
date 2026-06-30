@@ -47,6 +47,42 @@ from .config import (
 )
 
 
+UI_TEXT = {
+    "window_title": "网站照片上传器",
+    "status_ready": "就绪",
+    "tab_upload": "上传与监听",
+    "tab_diagnostics": "诊断与日志",
+    "settings": "账号与监听设置",
+    "server": "服务器",
+    "username": "用户名",
+    "password": "密码",
+    "remember_password": "记住密码",
+    "department": "部门",
+    "station": "站点",
+    "watch_folder": "监听文件夹",
+    "choose_folder": "选择文件夹",
+    "include_subfolders": "包含子文件夹",
+    "scan_interval": "扫描间隔（秒）",
+    "stable_delay": "稳定等待（秒）",
+    "retry_count": "重试次数",
+    "retry_delay": "重试等待（秒）",
+    "start_on_launch": "启动后自动监听",
+    "launch_minimized": "启动后最小化到托盘",
+    "actions": "操作",
+    "login_save": "登录并保存",
+    "save_settings": "保存设置",
+    "upload_files": "上传照片",
+    "scan_once": "立即扫描",
+    "start_watch": "开始监听",
+    "stop_watch": "停止监听",
+    "activity": "活动记录",
+    "refresh_diagnostics": "刷新诊断",
+    "open_log_folder": "打开日志目录",
+    "show_window": "显示主窗口",
+    "quit": "退出",
+}
+
+
 class TaskThread(QThread):
     message = Signal(str)
     failed = Signal(str)
@@ -69,7 +105,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Photo Monitor Uploader")
+        self.setWindowTitle(UI_TEXT["window_title"])
         self.resize(980, 680)
         self.allow_quit = False
         self.watch_controller: worker.WatchController | None = None
@@ -78,30 +114,30 @@ class MainWindow(QMainWindow):
         self._build_ui()
         self._build_tray()
         self._load_config_to_form()
-        self._refresh_status("Ready")
+        self._refresh_status(UI_TEXT["status_ready"])
 
     def _build_ui(self) -> None:
         central = QWidget()
         root = QVBoxLayout(central)
 
-        self.status_label = QLabel("Ready")
+        self.status_label = QLabel(UI_TEXT["status_ready"])
         self.status_label.setObjectName("statusLabel")
         root.addWidget(self.status_label)
 
         tabs = QTabWidget()
-        tabs.addTab(self._build_upload_tab(), "Upload and Watch")
-        tabs.addTab(self._build_diagnostics_tab(), "Diagnostics and Logs")
+        tabs.addTab(self._build_upload_tab(), UI_TEXT["tab_upload"])
+        tabs.addTab(self._build_diagnostics_tab(), UI_TEXT["tab_diagnostics"])
         root.addWidget(tabs)
 
         self.setCentralWidget(central)
         self.setStyleSheet(
             """
-            QMainWindow { background: #f6f7f9; }
-            QLabel#statusLabel { padding: 12px; background: #17324d; color: white; font-size: 15px; }
+            QMainWindow { background: #f5f7f8; }
+            QLabel#statusLabel { padding: 14px; background: #1e3a3a; color: white; font-size: 15px; font-weight: 600; }
             QGroupBox { font-weight: 600; border: 1px solid #d7dce2; border-radius: 6px; margin-top: 12px; padding: 10px; background: white; }
             QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; }
             QPushButton { padding: 8px 12px; border: 1px solid #bac3cf; border-radius: 5px; background: white; }
-            QPushButton:hover { background: #eef4fb; }
+            QPushButton:hover { background: #eef6f4; border-color: #8fb7ae; }
             QPushButton:disabled { color: #8a94a3; background: #eef0f3; }
             QLineEdit, QSpinBox { padding: 7px; border: 1px solid #bac3cf; border-radius: 5px; background: white; }
             QTextEdit { border: 1px solid #d7dce2; border-radius: 6px; background: white; }
@@ -112,17 +148,17 @@ class MainWindow(QMainWindow):
         page = QWidget()
         layout = QVBoxLayout(page)
 
-        settings = QGroupBox("Account and Watch Settings")
+        settings = QGroupBox(UI_TEXT["settings"])
         form = QFormLayout(settings)
         self.server_input = QLineEdit(DEFAULT_SERVER)
         self.username_input = QLineEdit("admin")
         self.password_input = QLineEdit()
         self.password_input.setEchoMode(QLineEdit.Password)
-        self.remember_password_input = QCheckBox("Remember password")
+        self.remember_password_input = QCheckBox(UI_TEXT["remember_password"])
         self.department_input = QLineEdit()
         self.station_input = QLineEdit(DEFAULT_STATION)
         self.watch_dir_input = QLineEdit(DEFAULT_WATCH_DIR)
-        self.include_subdirs_input = QCheckBox("Include subfolders")
+        self.include_subdirs_input = QCheckBox(UI_TEXT["include_subfolders"])
         self.include_subdirs_input.setChecked(True)
         self.interval_input = QSpinBox()
         self.interval_input.setRange(5, 86400)
@@ -136,44 +172,44 @@ class MainWindow(QMainWindow):
         self.retry_delay_input = QSpinBox()
         self.retry_delay_input.setRange(1, 300)
         self.retry_delay_input.setValue(5)
-        self.start_on_launch_input = QCheckBox("Start watching on launch")
-        self.launch_minimized_input = QCheckBox("Launch minimized to tray")
+        self.start_on_launch_input = QCheckBox(UI_TEXT["start_on_launch"])
+        self.launch_minimized_input = QCheckBox(UI_TEXT["launch_minimized"])
 
-        form.addRow("Server", self.server_input)
-        form.addRow("Username", self.username_input)
-        form.addRow("Password", self.password_input)
+        form.addRow(UI_TEXT["server"], self.server_input)
+        form.addRow(UI_TEXT["username"], self.username_input)
+        form.addRow(UI_TEXT["password"], self.password_input)
         form.addRow("", self.remember_password_input)
-        form.addRow("Department", self.department_input)
-        form.addRow("Station", self.station_input)
+        form.addRow(UI_TEXT["department"], self.department_input)
+        form.addRow(UI_TEXT["station"], self.station_input)
 
         folder_row = QHBoxLayout()
         folder_row.addWidget(self.watch_dir_input)
-        choose_button = QPushButton("Choose Folder")
+        choose_button = QPushButton(UI_TEXT["choose_folder"])
         choose_button.clicked.connect(self.choose_watch_dir)
         folder_row.addWidget(choose_button)
-        form.addRow("Watch Folder", folder_row)
+        form.addRow(UI_TEXT["watch_folder"], folder_row)
         form.addRow("", self.include_subdirs_input)
-        form.addRow("Scan Interval (seconds)", self.interval_input)
-        form.addRow("Stable Delay (seconds)", self.stable_input)
-        form.addRow("Retry Count", self.retry_count_input)
-        form.addRow("Retry Delay (seconds)", self.retry_delay_input)
+        form.addRow(UI_TEXT["scan_interval"], self.interval_input)
+        form.addRow(UI_TEXT["stable_delay"], self.stable_input)
+        form.addRow(UI_TEXT["retry_count"], self.retry_count_input)
+        form.addRow(UI_TEXT["retry_delay"], self.retry_delay_input)
         form.addRow("", self.start_on_launch_input)
         form.addRow("", self.launch_minimized_input)
         layout.addWidget(settings)
 
-        actions = QGroupBox("Actions")
+        actions = QGroupBox(UI_TEXT["actions"])
         action_layout = QGridLayout(actions)
-        self.login_button = QPushButton("Login and Save")
+        self.login_button = QPushButton(UI_TEXT["login_save"])
         self.login_button.clicked.connect(self.login_and_save)
-        self.save_button = QPushButton("Save Settings")
+        self.save_button = QPushButton(UI_TEXT["save_settings"])
         self.save_button.clicked.connect(self.save_settings)
-        self.upload_button = QPushButton("Upload Files")
+        self.upload_button = QPushButton(UI_TEXT["upload_files"])
         self.upload_button.clicked.connect(self.upload_files)
-        self.scan_button = QPushButton("Scan Once")
+        self.scan_button = QPushButton(UI_TEXT["scan_once"])
         self.scan_button.clicked.connect(self.scan_once)
-        self.start_button = QPushButton("Start Watching")
+        self.start_button = QPushButton(UI_TEXT["start_watch"])
         self.start_button.clicked.connect(self.start_watching)
-        self.stop_button = QPushButton("Stop Watching")
+        self.stop_button = QPushButton(UI_TEXT["stop_watch"])
         self.stop_button.clicked.connect(self.stop_watching)
         self.stop_button.setEnabled(False)
 
@@ -183,7 +219,7 @@ class MainWindow(QMainWindow):
             action_layout.addWidget(button, index // 3, index % 3)
         layout.addWidget(actions)
 
-        activity = QGroupBox("Activity")
+        activity = QGroupBox(UI_TEXT["activity"])
         activity_layout = QVBoxLayout(activity)
         self.activity_log = QTextEdit()
         self.activity_log.setReadOnly(True)
@@ -196,9 +232,9 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(page)
         self.diagnostics = QTextEdit()
         self.diagnostics.setReadOnly(True)
-        refresh = QPushButton("Refresh Diagnostics")
+        refresh = QPushButton(UI_TEXT["refresh_diagnostics"])
         refresh.clicked.connect(self.refresh_diagnostics)
-        open_log = QPushButton("Open Log Folder")
+        open_log = QPushButton(UI_TEXT["open_log_folder"])
         open_log.clicked.connect(self.open_log_folder)
         row = QHBoxLayout()
         row.addWidget(refresh)
@@ -212,19 +248,21 @@ class MainWindow(QMainWindow):
         self.tray = QSystemTrayIcon(self)
         self.tray.setIcon(self.style().standardIcon(self.style().StandardPixmap.SP_ComputerIcon))
         menu = QMenu()
-        show_action = QAction("Show Window", self)
+        show_action = QAction(UI_TEXT["show_window"], self)
         show_action.triggered.connect(self.show_window)
-        start_action = QAction("Start Watching", self)
+        start_action = QAction(UI_TEXT["start_watch"], self)
         start_action.triggered.connect(self.start_watching)
-        stop_action = QAction("Stop Watching", self)
+        stop_action = QAction(UI_TEXT["stop_watch"], self)
         stop_action.triggered.connect(self.stop_watching)
-        scan_action = QAction("Scan Once", self)
+        scan_action = QAction(UI_TEXT["scan_once"], self)
         scan_action.triggered.connect(self.scan_once)
-        upload_action = QAction("Upload Files", self)
+        upload_action = QAction(UI_TEXT["upload_files"], self)
         upload_action.triggered.connect(self.upload_files)
-        quit_action = QAction("Quit", self)
+        open_log_action = QAction(UI_TEXT["open_log_folder"], self)
+        open_log_action.triggered.connect(self.open_log_folder)
+        quit_action = QAction(UI_TEXT["quit"], self)
         quit_action.triggered.connect(self.quit_app)
-        for action in [show_action, start_action, stop_action, scan_action, upload_action, quit_action]:
+        for action in [show_action, start_action, stop_action, scan_action, upload_action, open_log_action, quit_action]:
             menu.addAction(action)
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(lambda reason: self.show_window() if reason == QSystemTrayIcon.DoubleClick else None)
@@ -276,14 +314,14 @@ class MainWindow(QMainWindow):
     def _refresh_status(self, text: str) -> None:
         self.status_label.setText(text)
         if hasattr(self, "tray"):
-            self.tray.setToolTip(f"Photo Monitor Uploader - {text}")
+            self.tray.setToolTip(f"{UI_TEXT['window_title']} - {text}")
 
     def append_log(self, message: str) -> None:
         self.activity_log.append(message)
         self._refresh_status(message)
 
     def choose_watch_dir(self) -> None:
-        folder = QFileDialog.getExistingDirectory(self, "Choose Watch Folder", self.watch_dir_input.text())
+        folder = QFileDialog.getExistingDirectory(self, UI_TEXT["choose_folder"], self.watch_dir_input.text())
         if folder:
             self.watch_dir_input.setText(folder)
 
@@ -291,7 +329,7 @@ class MainWindow(QMainWindow):
         thread = TaskThread(target)
         self.task_threads.append(thread)
         thread.message.connect(self.append_log)
-        thread.failed.connect(lambda message: QMessageBox.warning(self, "Operation Failed", message))
+        thread.failed.connect(lambda message: QMessageBox.warning(self, "操作失败", message))
         thread.failed.connect(self.append_log)
         thread.finished_ok.connect(self.append_log)
         thread.finished.connect(lambda: self.task_threads.remove(thread) if thread in self.task_threads else None)
@@ -306,7 +344,7 @@ class MainWindow(QMainWindow):
         save_config(config)
         if self.remember_password_input.isChecked() and self.password_input.text():
             save_password(config.username, self.password_input.text())
-        self.append_log("Settings saved")
+        self.append_log("设置已保存")
 
     def login_and_save(self) -> None:
         def task(log):
@@ -320,13 +358,13 @@ class MainWindow(QMainWindow):
             save_config(config)
             if self.remember_password_input.isChecked() and self.password_input.text():
                 save_password(config.username, self.password_input.text())
-            log(f"Login succeeded: {config.username}")
-            return "Login and save complete"
+            log(f"登录成功：{config.username}")
+            return "登录并保存完成"
 
         self._run_task(task)
 
     def upload_files(self) -> None:
-        files, _ = QFileDialog.getOpenFileNames(self, "Choose Photos", "", "Images (*.jpg *.jpeg *.png *.webp)")
+        files, _ = QFileDialog.getOpenFileNames(self, "选择照片", "", "Images (*.jpg *.jpeg *.png *.webp)")
         if not files:
             return
 
@@ -334,8 +372,8 @@ class MainWindow(QMainWindow):
             config = self._saved_or_form_config()
             for file_name in files:
                 api_client.upload_with_retry(config, Path(file_name), log=log)
-                log(f"Uploaded: {Path(file_name).name}")
-            return f"Upload complete: {len(files)} file(s)"
+                log(f"已上传：{Path(file_name).name}")
+            return f"上传完成：{len(files)} 个文件"
 
         self._run_task(task)
 
@@ -346,19 +384,24 @@ class MainWindow(QMainWindow):
             if not isinstance(state, dict):
                 state = {}
             result = worker.scan_once(config, state, save_state=lambda value: save_json(STATE_FILE, value), log=log)
-            return f"Scan complete: uploaded {result.uploaded}, skipped {result.skipped}, failed {result.failed}"
+            return f"扫描完成：上传 {result.uploaded}，跳过 {result.skipped}，失败 {result.failed}"
 
         self._run_task(task)
 
     def start_watching(self) -> None:
         if self.watch_controller is not None:
-            self.append_log("Watch is already running")
+            self.append_log("监听已在运行")
             return
-        config = self._saved_or_form_config()
+        try:
+            config = self._saved_or_form_config()
+        except Exception as error:
+            QMessageBox.warning(self, "无法开始监听", str(error))
+            self.append_log(f"无法开始监听：{error}")
+            return
         state = read_json(STATE_FILE, {})
         if not isinstance(state, dict):
             state = {}
-        self.watch_controller = worker.make_polling_watch_controller(
+        self.watch_controller = worker.make_watch_controller(
             config,
             state,
             save_state=lambda value: save_json(STATE_FILE, value),
@@ -367,7 +410,7 @@ class MainWindow(QMainWindow):
         self.watch_controller.start()
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
-        self.append_log("Watch started")
+        self.append_log("监听已启动")
 
     def stop_watching(self) -> None:
         if self.watch_controller is None:
@@ -377,22 +420,22 @@ class MainWindow(QMainWindow):
         self.watch_controller = None
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
-        self.append_log("Watch stopped")
+        self.append_log("监听已停止")
 
     def refresh_diagnostics(self) -> None:
         lines = [
-            f"Config file: {CONFIG_FILE}",
-            f"Log file: {LOG_FILE}",
-            f"State file: {STATE_FILE}",
-            f"Watch folder: {self.watch_dir_input.text()}",
-            f"Log exists: {'yes' if LOG_FILE.exists() else 'no'}",
+            f"配置文件：{CONFIG_FILE}",
+            f"日志文件：{LOG_FILE}",
+            f"状态文件：{STATE_FILE}",
+            f"监听文件夹：{self.watch_dir_input.text()}",
+            f"日志存在：{'是' if LOG_FILE.exists() else '否'}",
         ]
         try:
             config = self._saved_or_form_config()
             api_client.auth_me(config)
-            lines.append(f"Login state: valid, user {config.username}")
+            lines.append(f"登录状态：有效，用户 {config.username}")
         except Exception as error:
-            lines.append(f"Login state: needs attention, {error}")
+            lines.append(f"登录状态：需要检查，{error}")
         self.diagnostics.setPlainText("\n".join(lines))
 
     def open_log_folder(self) -> None:
@@ -415,7 +458,7 @@ class MainWindow(QMainWindow):
             return
         event.ignore()
         self.hide()
-        self.tray.showMessage("Photo Monitor Uploader", "Application minimized to the system tray.", QSystemTrayIcon.Information, 2500)
+        self.tray.showMessage(UI_TEXT["window_title"], "程序已最小化到系统托盘。", QSystemTrayIcon.Information, 2500)
 
 
 def main() -> int:

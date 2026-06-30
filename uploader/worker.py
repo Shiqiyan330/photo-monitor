@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import api_client, scanner
-from .config import UploaderConfig
+from .config import PHOTO_EXTENSIONS, UploaderConfig
 
 
 LogCallback = Callable[[str], None]
@@ -99,5 +99,45 @@ def make_polling_watch_controller(
             scan_once(config, state, save_state=save_state, log=log, cancelled=cancelled)
             cancelled.wait(config.interval_seconds)
         log("watch stopped")
+
+    return WatchController(run)
+
+
+def make_watch_controller(
+    config: UploaderConfig,
+    state: dict[str, Any],
+    *,
+    save_state: SaveStateCallable,
+    log: LogCallback,
+) -> WatchController:
+    try:
+        from watchdog.events import FileSystemEventHandler
+        from watchdog.observers import Observer
+    except Exception:
+        return make_polling_watch_controller(config, state, save_state=save_state, log=log)
+
+    def run(cancelled: threading.Event) -> None:
+        class Handler(FileSystemEventHandler):
+            def on_created(self, event) -> None:
+                if event.is_directory:
+                    return
+                path = Path(event.src_path)
+                if path.suffix.lower() in PHOTO_EXTENSIONS:
+                    scan_once(config, state, save_state=save_state, log=log, cancelled=cancelled)
+
+            def on_modified(self, event) -> None:
+                self.on_created(event)
+
+        observer = Observer()
+        observer.schedule(Handler(), config.watch_dir, recursive=config.include_subdirectories)
+        observer.start()
+        log(f"watchdog started: watch_dir={config.watch_dir}")
+        try:
+            while not cancelled.is_set():
+                cancelled.wait(1)
+        finally:
+            observer.stop()
+            observer.join(5)
+            log("watchdog stopped")
 
     return WatchController(run)

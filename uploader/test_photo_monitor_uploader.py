@@ -216,6 +216,37 @@ class WorkerTests(unittest.TestCase):
         self.assertTrue(controller.cancelled.is_set())
 
 
+class WatchdogSelectionTests(unittest.TestCase):
+    def test_make_watch_controller_returns_controller(self):
+        config = uploader_config.UploaderConfig(
+            server="http://example.com",
+            token="token",
+            username="admin",
+            department="HQ",
+            station="uploads",
+            watch_dir=str(WORKSPACE_TEMP),
+            interval_seconds=5,
+        )
+        controller = worker.make_watch_controller(
+            config,
+            {},
+            save_state=lambda _state: None,
+            log=lambda _message: None,
+        )
+        self.assertIsInstance(controller, worker.WatchController)
+        controller.stop()
+
+
+class BuildScriptTests(unittest.TestCase):
+    def test_windows_build_script_runs_tests_builds_and_copies_download(self):
+        script = Path(__file__).with_name("build_windows.ps1")
+        self.assertTrue(script.exists())
+        content = script.read_text(encoding="utf-8")
+        self.assertIn("python -m unittest uploader.test_photo_monitor_uploader", content)
+        self.assertIn("pyinstaller", content)
+        self.assertIn("photo-monitor\\public\\downloads\\photo-monitor-uploader.exe", content)
+
+
 class CliTests(unittest.TestCase):
     def test_parser_accepts_gui_and_legacy_powershell_option_names(self):
         args = cli.build_parser().parse_args(
@@ -245,6 +276,17 @@ class GuiTests(unittest.TestCase):
             self.assertIn("PySide6", str(error))
             return
         self.assertTrue(hasattr(gui, "main"))
+
+    def test_gui_defines_readable_chinese_labels(self):
+        try:
+            from uploader import gui
+        except ModuleNotFoundError as error:
+            self.assertIn("PySide6", str(error))
+            return
+        labels = gui.UI_TEXT
+        self.assertEqual(labels["window_title"], "网站照片上传器")
+        self.assertEqual(labels["start_watch"], "开始监听")
+        self.assertEqual(labels["upload_files"], "上传照片")
 
 
 if __name__ == "__main__":
