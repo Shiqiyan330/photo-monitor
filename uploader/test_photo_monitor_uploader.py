@@ -243,7 +243,7 @@ class BuildScriptTests(unittest.TestCase):
         self.assertTrue(script.exists())
         content = script.read_text(encoding="utf-8")
         self.assertIn('$Python = if ($env:PYTHON)', content)
-        self.assertIn("& $Python -m unittest uploader.test_photo_monitor_uploader", content)
+        self.assertIn("& $Python -m unittest uploader.test_photo_monitor_uploader uploader.test_gui_operations", content)
         self.assertIn("& $Python -m pip install --timeout 120", content)
         self.assertIn("if ($LASTEXITCODE -ne 0)", content)
         self.assertIn("& $Python -m PyInstaller", content)

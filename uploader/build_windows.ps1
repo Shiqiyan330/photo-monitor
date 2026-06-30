@@ -16,7 +16,7 @@ if ($LASTEXITCODE -ne 0) {
   throw "pip install failed"
 }
 
-& $Python -m unittest uploader.test_photo_monitor_uploader
+& $Python -m unittest uploader.test_photo_monitor_uploader uploader.test_gui_operations
 if ($LASTEXITCODE -ne 0) {
   throw "unit tests failed"
 }
