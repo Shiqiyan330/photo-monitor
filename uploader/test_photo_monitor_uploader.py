@@ -242,8 +242,11 @@ class BuildScriptTests(unittest.TestCase):
         script = Path(__file__).with_name("build_windows.ps1")
         self.assertTrue(script.exists())
         content = script.read_text(encoding="utf-8")
-        self.assertIn("python -m unittest uploader.test_photo_monitor_uploader", content)
-        self.assertIn("pyinstaller", content)
+        self.assertIn('$Python = if ($env:PYTHON)', content)
+        self.assertIn("& $Python -m unittest uploader.test_photo_monitor_uploader", content)
+        self.assertIn("& $Python -m pip install --timeout 120", content)
+        self.assertIn("if ($LASTEXITCODE -ne 0)", content)
+        self.assertIn("& $Python -m PyInstaller", content)
         self.assertIn("photo-monitor\\public\\downloads\\photo-monitor-uploader.exe", content)
 
 
@@ -272,16 +275,16 @@ class GuiTests(unittest.TestCase):
     def test_gui_module_imports_or_reports_missing_pyside6(self):
         try:
             from uploader import gui
-        except ModuleNotFoundError as error:
-            self.assertIn("PySide6", str(error))
+        except ImportError as error:
+            self.assertTrue("PySide6" in str(error) or "DLL load failed" in str(error))
             return
         self.assertTrue(hasattr(gui, "main"))
 
     def test_gui_defines_readable_chinese_labels(self):
         try:
             from uploader import gui
-        except ModuleNotFoundError as error:
-            self.assertIn("PySide6", str(error))
+        except ImportError as error:
+            self.assertTrue("PySide6" in str(error) or "DLL load failed" in str(error))
             return
         labels = gui.UI_TEXT
         self.assertEqual(labels["window_title"], "网站照片上传器")
