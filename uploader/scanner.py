@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import re
 import time
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from .config import KNOWN_PHOTO_STATIONS, MAX_UPLOAD_BYTES, PHOTO_EXTENSIONS, UploaderConfig, safe_path_part
+
+PHOTO_DATE_PATTERNS = (
+    re.compile(r"_(20\d{12})\d*_"),
+)
 
 
 def file_key(path: Path) -> str:
@@ -28,9 +33,22 @@ def resolve_photo_station(default_station: str, path: Path) -> str:
     return safe_path_part("Station", default_station)
 
 
+def extract_photo_date(path: Path) -> date:
+    for pattern in PHOTO_DATE_PATTERNS:
+        match = pattern.search(path.name)
+        if not match:
+            continue
+        raw = match.group(1)
+        try:
+            return date(int(raw[0:4]), int(raw[4:6]), int(raw[6:8]))
+        except ValueError:
+            break
+    return datetime.fromtimestamp(path.stat().st_mtime).date()
+
+
 def iter_watched_files(root: Path, include_subdirectories: bool) -> list[Path]:
     iterator = root.rglob("*") if include_subdirectories else root.glob("*")
-    return sorted(
+    candidates = sorted(
         path
         for path in iterator
         if path.is_file()
@@ -38,6 +56,12 @@ def iter_watched_files(root: Path, include_subdirectories: bool) -> list[Path]:
         and not path.name.startswith(".")
         and not path.name.endswith(".tmp")
     )
+    if not candidates:
+        return []
+
+    dated_candidates = [(path, extract_photo_date(path)) for path in candidates]
+    latest_date = max(photo_date for _path, photo_date in dated_candidates)
+    return [path for path, photo_date in dated_candidates if photo_date == latest_date]
 
 
 def should_upload_file(path: Path, config: UploaderConfig, state: dict[str, Any]) -> tuple[bool, str]:

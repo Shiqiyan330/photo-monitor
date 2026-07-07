@@ -11,7 +11,7 @@ from tempfile import NamedTemporaryFile
 from fastapi import HTTPException, UploadFile
 
 from services.auth_service import ALL_DEPARTMENTS, extract_matrix_departments, has_matrix_permission
-from services.photo_service import IMG_EXTS
+from services.photo_service import IMG_EXTS, extract_photo_datetime_from_name
 
 CATEGORY_SYSTEMS = {
     "company_files": "company_files",
@@ -22,6 +22,7 @@ CATEGORY_SYSTEMS = {
 SAFE_NAME_RE = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 DEFAULT_MAX_UPLOAD_MB = 200
 MAX_UPLOAD_BYTES = int(os.getenv("PHOTO_MONITOR_MAX_UPLOAD_MB", str(DEFAULT_MAX_UPLOAD_MB))) * 1024 * 1024
+PHOTO_DEDUPE_WINDOW_SECONDS = 10
 ALLOWED_UPLOAD_EXTS = IMG_EXTS | {".zip", ".csv", ".xlsx", ".xls", ".json", ".txt", ".pdf"}
 ARTICLE_UPLOAD_EXTS = {".pdf", ".doc", ".docx", ".ppt", ".pptx", ".txt", ".md", ".html", ".htm", ".zip"}
 LEDGER_UPLOAD_EXTS = {".csv", ".xlsx", ".xls", ".json", ".txt", ".pdf", ".zip"}
@@ -130,6 +131,29 @@ def _save_file_to_target(file: UploadFile, target: Path) -> tuple[int, str]:
     return size, digest.hexdigest()
 
 
+def _photo_time(path: Path) -> float:
+    captured_at = extract_photo_datetime_from_name(path.name)
+    return captured_at.timestamp() if captured_at else path.stat().st_mtime
+
+
+def _delete_photo_duplicates_in_window(target: Path, window_seconds: int = PHOTO_DEDUPE_WINDOW_SECONDS) -> int:
+    if window_seconds <= 0 or not target.is_file():
+        return 0
+
+    target_time = _photo_time(target)
+    deleted = 0
+    for candidate in target.parent.iterdir():
+        if candidate == target or not candidate.is_file() or candidate.suffix.lower() not in IMG_EXTS:
+            continue
+        try:
+            if abs(_photo_time(candidate) - target_time) <= window_seconds:
+                candidate.unlink(missing_ok=True)
+                deleted += 1
+        except OSError:
+            continue
+    return deleted
+
+
 def _metadata_path(base: Path) -> Path:
     return base / METADATA_FILENAME
 
@@ -221,6 +245,7 @@ def save_photo_upload_file(
         target = target.with_name(f"{target.stem}_{now.strftime('%H%M%S')}{target.suffix}")
 
     size, sha256 = _save_file_to_target(file, target)
+    _delete_photo_duplicates_in_window(target)
 
     relative_path = target.relative_to(base)
     return {

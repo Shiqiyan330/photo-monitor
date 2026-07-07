@@ -2,6 +2,7 @@ import shutil
 import tempfile
 import unittest
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from unittest import mock
@@ -103,6 +104,46 @@ class ScannerTests(unittest.TestCase):
 
         self.assertEqual(recursive, ["a.jpg", "c.png"])
         self.assertEqual(flat, ["a.jpg"])
+
+    def test_iter_watched_files_only_returns_latest_photo_date(self):
+        root = make_case_dir("iter_watched_files_latest_date")
+        old_photo = root / "camera_20260706120000_001.jpg"
+        newest_photo = root / "camera_20260707120000_001.jpg"
+        another_newest = root / "camera_20260707120500_002.jpg"
+        old_photo.write_bytes(b"old")
+        newest_photo.write_bytes(b"new")
+        another_newest.write_bytes(b"newer")
+
+        matched = [item.name for item in scanner.iter_watched_files(root, include_subdirectories=True)]
+
+        self.assertEqual(matched, [newest_photo.name, another_newest.name])
+
+    def test_iter_watched_files_excludes_historical_log_style_folders(self):
+        root = make_case_dir("iter_watched_files_log_style")
+        old_folder = root / "shangzhan" / "2026_06_23-2026_06_23"
+        latest_folder = root / "shangzhan" / "2026_06_26-2026_06_26"
+        old_folder.mkdir(parents=True)
+        latest_folder.mkdir(parents=True)
+        (old_folder / "上站_L43937866_20260623151143605_ALARM_INPUT.jpg").write_bytes(b"old")
+        latest = latest_folder / "上站_L43937866_20260626130256356_ALARM_INPUT.jpg"
+        latest.write_bytes(b"latest")
+
+        matched = scanner.iter_watched_files(root, include_subdirectories=True)
+
+        self.assertEqual(matched, [latest])
+
+    def test_iter_watched_files_uses_modified_date_when_filename_has_no_camera_timestamp(self):
+        root = make_case_dir("iter_watched_files_mtime_fallback")
+        old_photo = root / "manual_old.jpg"
+        newest_photo = root / "manual_new.jpg"
+        old_photo.write_bytes(b"old")
+        newest_photo.write_bytes(b"new")
+        os.utime(old_photo, (datetime(2026, 7, 6, 12, 0).timestamp(), datetime(2026, 7, 6, 12, 0).timestamp()))
+        os.utime(newest_photo, (datetime(2026, 7, 7, 12, 0).timestamp(), datetime(2026, 7, 7, 12, 0).timestamp()))
+
+        matched = scanner.iter_watched_files(root, include_subdirectories=True)
+
+        self.assertEqual(matched, [newest_photo])
 
     def test_state_recorder_adds_uploaded_file_key(self):
         root = make_case_dir("state_recorder")
@@ -214,6 +255,66 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual(result.uploaded, 1)
         self.assertEqual(result.failed, 0)
         self.assertTrue(any(item[0] == "save" for item in events))
+
+    def test_scan_once_logs_upload_permission_hint_for_403(self):
+        root = make_case_dir("scan_once_permission_hint")
+        photo = root / "photo.jpg"
+        photo.write_bytes(b"photo")
+        config = uploader_config.UploaderConfig(
+            server="http://example.com",
+            token="token",
+            username="viewer",
+            department="HQ",
+            station="uploads",
+            watch_dir=str(root),
+            stable_seconds=0,
+        )
+        events = []
+
+        result = worker.scan_once(
+            config,
+            {},
+            upload=lambda _config, _path: (_ for _ in ()).throw(
+                uploader_config.UploaderError("HTTP 403: No permission to upload")
+            ),
+            log=events.append,
+        )
+
+        self.assertEqual(result.failed, 1)
+        self.assertTrue(any("当前账号没有照片上传权限" in message for message in events))
+
+    def test_scan_once_logs_department_permission_hint_for_403(self):
+        root = make_case_dir("scan_once_department_permission_hint")
+        photo = root / "photo.jpg"
+        photo.write_bytes(b"photo")
+        config = uploader_config.UploaderConfig(
+            server="http://example.com",
+            token="token",
+            username="viewer",
+            department="Other",
+            station="uploads",
+            watch_dir=str(root),
+            stable_seconds=0,
+        )
+        events = []
+
+        result = worker.scan_once(
+            config,
+            {},
+            upload=lambda _config, _path: (_ for _ in ()).throw(
+                uploader_config.UploaderError("HTTP 403: No permission to create this department")
+            ),
+            log=events.append,
+        )
+
+        self.assertEqual(result.failed, 1)
+        self.assertTrue(any("当前账号没有照片上传权限" in message for message in events))
+
+    def test_format_upload_error_keeps_non_permission_errors_unchanged(self):
+        self.assertEqual(
+            worker.format_upload_error(uploader_config.UploaderError("network error: timed out")),
+            "network error: timed out",
+        )
 
     def test_watch_controller_stop_sets_cancel_event(self):
         controller = worker.WatchController(lambda cancelled: None)

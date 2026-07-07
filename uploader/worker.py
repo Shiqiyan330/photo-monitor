@@ -22,6 +22,16 @@ class ScanResult:
     failed: int = 0
 
 
+def format_upload_error(error: Exception) -> str:
+    message = str(error)
+    if "HTTP 403" in message:
+        return (
+            f"{message}。当前账号没有照片上传权限，请使用有上传权限的账号重新登录，"
+            "或联系管理员在员工权限里开启“照片-新增/上传”权限。"
+        )
+    return message
+
+
 def scan_once(
     config: UploaderConfig,
     state: dict[str, Any],
@@ -67,7 +77,7 @@ def scan_once(
         except Exception as error:
             result.failed += 1
             if log:
-                log(f"upload failed: {path} error={error}")
+                log(f"upload failed: {path} error={format_upload_error(error)}")
     return result
 
 
