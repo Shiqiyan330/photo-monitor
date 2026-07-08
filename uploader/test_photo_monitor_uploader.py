@@ -380,6 +380,15 @@ class BuildScriptTests(unittest.TestCase):
             self.assertNotIn("runtime_tmpdir='.'", content, spec.name)
 
 
+class FrontendNginxConfigTests(unittest.TestCase):
+    def test_photo_resource_proxy_location_takes_precedence_over_static_image_regex(self):
+        root = Path(__file__).resolve().parents[1]
+        content = (root / "photo-monitor" / "nginx.conf").read_text(encoding="utf-8")
+
+        self.assertIn("location ^~ /photos", content)
+        self.assertLess(content.index("location ^~ /photos"), content.index("location ~*"))
+
+
 class CliTests(unittest.TestCase):
     def test_write_log_falls_back_when_log_file_is_unavailable(self):
         with (

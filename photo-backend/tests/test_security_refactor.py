@@ -136,6 +136,29 @@ def test_photo_resource_requires_matching_read_permission(tmp_path, monkeypatch)
     assert allowed.status_code == 200
 
 
+def test_photo_resource_accepts_unicode_path_and_query_token(tmp_path, monkeypatch):
+    from routers import photo
+
+    base = tmp_path / "photos"
+    target = base / "浙江之心" / "xiazhan" / "2026_07_08-2026_07_08" / "下站_AG3749139_20260708172229945_LINE_CROSSING_DETECTION.jpg"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"large-photo")
+    monkeypatch.setattr(photo, "BASE", base)
+
+    system = make_employee_system(tmp_path)
+    patch_employee_system(monkeypatch, system)
+    token = system.create_access_token("admin")
+
+    client = TestClient(app)
+    response = client.get(
+        "/photos/resource/浙江之心/xiazhan/2026_07_08-2026_07_08/下站_AG3749139_20260708172229945_LINE_CROSSING_DETECTION.jpg",
+        params={"token": token},
+    )
+
+    assert response.status_code == 200
+    assert response.content == b"large-photo"
+
+
 def test_upload_file_access_respects_department_and_action_permissions(tmp_path):
     from tempfile import SpooledTemporaryFile
 
