@@ -5,13 +5,19 @@ from pydantic import BaseModel, Field
 
 from routers.deps import require_admin
 from services.auth_service import employee_system
+from services.department_migration_service import (
+    DepartmentMigrationConflict,
+    DepartmentMigrationFailure,
+    DepartmentMigrationService,
+)
 from services.department_service import DepartmentStore
 from services.sms_service import SmsLogStore, load_sms_settings, run_due_reminders
-from services.upload_service import UPLOAD_CATEGORY_CONFIG, read_uploaded_departments
 
 
 router = APIRouter(prefix="/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 OFFICE_DATA_DIR = Path(__file__).resolve().parents[1] / "office_data"
+PHOTO_DATA_DIR = Path(__file__).resolve().parents[1] / "photos"
+THUMBNAIL_DATA_DIR = Path(__file__).resolve().parents[1] / ".thumbnails"
 department_store = DepartmentStore()
 
 
@@ -35,14 +41,32 @@ class DepartmentPayload(BaseModel):
     name: str
 
 
+class DepartmentMergePayload(BaseModel):
+    target: str
+
+
 def _managed_departments() -> list[str]:
-    return sorted(dict.fromkeys([*department_store.list_departments(), *employee_system.list_departments()]))
+    return _migration_service().list_departments()
 
 
-def _department_has_uploads(name: str) -> bool:
-    if name in read_uploaded_departments(OFFICE_DATA_DIR):
-        return True
-    return any((OFFICE_DATA_DIR / category / name).exists() for category in UPLOAD_CATEGORY_CONFIG)
+def _migration_service() -> DepartmentMigrationService:
+    return DepartmentMigrationService(
+        department_store,
+        employee_system,
+        PHOTO_DATA_DIR,
+        THUMBNAIL_DATA_DIR,
+        OFFICE_DATA_DIR,
+    )
+
+
+def _raise_migration_error(error: Exception) -> None:
+    if isinstance(error, DepartmentMigrationConflict):
+        status_code = 409
+    elif isinstance(error, DepartmentMigrationFailure):
+        status_code = 500
+    else:
+        status_code = 400
+    raise HTTPException(status_code=status_code, detail=str(error)) from error
 
 
 @router.get("/employees")
@@ -71,17 +95,35 @@ def create_department(payload: DepartmentPayload):
 @router.put("/departments/{name}")
 def rename_department(name: str, payload: DepartmentPayload):
     try:
-        new_name = department_store.rename_department(name, payload.name)
-        employee_system.rename_department(name, new_name)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    return {"success": True, "departments": _managed_departments()}
+        usage = _migration_service().rename(name, payload.name)
+    except (ValueError, DepartmentMigrationFailure) as error:
+        _raise_migration_error(error)
+    return {"success": True, "usage": usage, "departments": _managed_departments()}
+
+
+@router.get("/departments/{name}/usage")
+def get_department_usage(name: str):
+    return {"usage": _migration_service().get_usage(name)}
+
+
+@router.post("/departments/{name}/merge")
+def merge_department(name: str, payload: DepartmentMergePayload):
+    try:
+        usage = _migration_service().merge_and_delete(name, payload.target)
+    except (ValueError, DepartmentMigrationFailure) as error:
+        _raise_migration_error(error)
+    return {"success": True, "usage": usage, "departments": _managed_departments()}
 
 
 @router.delete("/departments/{name}")
 def delete_department(name: str):
-    if employee_system.department_is_used(name) or _department_has_uploads(name):
-        raise HTTPException(status_code=400, detail="部门仍有关联数据，不能删除")
+    service = _migration_service()
+    usage = service.get_usage(name)
+    if service.has_usage(usage):
+        raise HTTPException(
+            status_code=409,
+            detail={"message": "部门仍有关联数据，请选择目标部门迁移后删除", "usage": usage},
+        )
     try:
         department_store.delete_department(name)
     except ValueError as error:

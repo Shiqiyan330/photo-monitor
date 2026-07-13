@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from threading import RLock
 
 from fastapi import HTTPException, UploadFile
 
@@ -27,6 +28,7 @@ ALLOWED_UPLOAD_EXTS = IMG_EXTS | {".zip", ".csv", ".xlsx", ".xls", ".json", ".tx
 ARTICLE_UPLOAD_EXTS = {".pdf", ".doc", ".docx", ".ppt", ".pptx", ".txt", ".md", ".html", ".htm", ".zip"}
 LEDGER_UPLOAD_EXTS = {".csv", ".xlsx", ".xls", ".json", ".txt", ".pdf", ".zip"}
 METADATA_FILENAME = ".metadata.json"
+DATA_MUTATION_LOCK = RLock()
 
 
 @dataclass(frozen=True)
@@ -158,7 +160,7 @@ def _metadata_path(base: Path) -> Path:
     return base / METADATA_FILENAME
 
 
-def _read_metadata(base: Path) -> dict:
+def read_upload_metadata(base: Path) -> dict:
     import json
 
     path = _metadata_path(base)
@@ -174,14 +176,14 @@ def _read_metadata(base: Path) -> dict:
 
 def read_uploaded_departments(base: Path) -> list[str]:
     departments = []
-    for item in _read_metadata(base).values():
+    for item in read_upload_metadata(base).values():
         department = (item.get("department") or "").strip() if isinstance(item, dict) else ""
         if department:
             departments.append(department)
     return list(dict.fromkeys(departments))
 
 
-def _write_metadata(base: Path, metadata: dict) -> None:
+def write_upload_metadata(base: Path, metadata: dict) -> None:
     import json
 
     base.mkdir(parents=True, exist_ok=True)
@@ -193,10 +195,10 @@ def _write_metadata(base: Path, metadata: dict) -> None:
 
 
 def _record_upload(base: Path, item: dict) -> dict:
-    metadata = _read_metadata(base)
+    metadata = read_upload_metadata(base)
     upload_id = item["id"]
     metadata[upload_id] = item
-    _write_metadata(base, metadata)
+    write_upload_metadata(base, metadata)
     return item
 
 
@@ -220,7 +222,7 @@ def normalize_category(category: str) -> str:
     return LEGACY_CATEGORY_ALIASES.get(category, category)
 
 
-def save_photo_upload_file(
+def _save_photo_upload_file(
     base: Path,
     file: UploadFile,
     department: str,
@@ -263,7 +265,18 @@ def save_photo_upload_file(
     }
 
 
-def save_data_upload_file(
+def save_photo_upload_file(
+    base: Path,
+    file: UploadFile,
+    department: str,
+    station: str,
+    user: dict,
+) -> dict:
+    with DATA_MUTATION_LOCK:
+        return _save_photo_upload_file(base, file, department, station, user)
+
+
+def _save_data_upload_file(
     base: Path,
     category: str,
     file: UploadFile,
@@ -308,13 +321,24 @@ def save_data_upload_file(
     return _public_item(_record_upload(base, item))
 
 
+def save_data_upload_file(
+    base: Path,
+    category: str,
+    file: UploadFile,
+    department: str,
+    user: dict,
+) -> dict:
+    with DATA_MUTATION_LOCK:
+        return _save_data_upload_file(base, category, file, department, user)
+
+
 def list_data_uploads(base: Path, category: str, user: dict) -> list[dict]:
     category = normalize_category(category)
     _category_config(category)
 
     category_base = base / category
     allowed_departments = None if user["role"] == "admin" else get_accessible_departments(user, CATEGORY_SYSTEMS[category], "read")
-    metadata = _read_metadata(base)
+    metadata = read_upload_metadata(base)
     items = []
 
     for item in metadata.values():
@@ -369,7 +393,7 @@ def list_data_uploads(base: Path, category: str, user: dict) -> list[dict]:
 def get_data_upload(base: Path, category: str, upload_id: str, user: dict, action: str = "read") -> tuple[Path, dict]:
     category = normalize_category(category)
     _category_config(category)
-    metadata = _read_metadata(base)
+    metadata = read_upload_metadata(base)
     item = metadata.get(upload_id)
     if not item or item.get("category") != category:
         raise HTTPException(status_code=404, detail="File not found")
@@ -386,13 +410,18 @@ def get_data_upload(base: Path, category: str, upload_id: str, user: dict, actio
     return target, _public_item(item)
 
 
-def delete_data_upload(base: Path, category: str, upload_id: str, user: dict) -> dict:
+def _delete_data_upload(base: Path, category: str, upload_id: str, user: dict) -> dict:
     category = normalize_category(category)
     target, item = get_data_upload(base, category, upload_id, user, action="delete")
     ensure_department_action_allowed(user, CATEGORY_SYSTEMS[category], item.get("department", ""), "delete")
 
-    metadata = _read_metadata(base)
+    metadata = read_upload_metadata(base)
     target.unlink(missing_ok=True)
     metadata.pop(upload_id, None)
-    _write_metadata(base, metadata)
+    write_upload_metadata(base, metadata)
     return item
+
+
+def delete_data_upload(base: Path, category: str, upload_id: str, user: dict) -> dict:
+    with DATA_MUTATION_LOCK:
+        return _delete_data_upload(base, category, upload_id, user)

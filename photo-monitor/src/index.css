@@ -1472,6 +1472,44 @@ h4 {
   font-weight: 800;
 }
 
+.department-delete-modal {
+  width: min(460px, calc(100vw - 32px));
+}
+
+.department-usage-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.department-usage-grid > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 40px;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #f8fafc;
+  color: #475569;
+}
+
+.department-usage-grid strong {
+  color: #13202f;
+}
+
+.department-delete-submit {
+  width: 100%;
+}
+
+@media (max-width: 520px) {
+  .department-usage-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .field-hint {
   margin: 6px 0 0;
   color: #718096;

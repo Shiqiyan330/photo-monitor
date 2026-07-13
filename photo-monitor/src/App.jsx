@@ -13,6 +13,8 @@ import {
   fetchStructureEmployees,
   fetchStudyArticles,
   fetchUploadedFiles,
+  getDepartmentUsage,
+  mergeDepartment,
   updateEmployee,
   renameDepartment,
   uploadCompanyFile,
@@ -359,13 +361,25 @@ function App() {
     const result = await renameDepartment(name, payload)
     setDepartments(result.departments)
     await loadEmployees()
-    showBanner("部门已改名")
+    showBanner("部门已改名，历史数据已迁移")
+  }
+
+  const handleGetDepartmentUsage = async (name) => {
+    const result = await getDepartmentUsage(name)
+    return result.usage
   }
 
   const handleDeleteDepartment = async (name) => {
     const result = await deleteDepartment(name)
     setDepartments(result.departments)
     showBanner("部门已删除")
+  }
+
+  const handleMergeDepartment = async (name, target) => {
+    const result = await mergeDepartment(name, { target })
+    setDepartments(result.departments)
+    await loadEmployees()
+    showBanner("部门数据已迁移，原部门已删除")
   }
 
   const openEmployeePage = () => {
@@ -473,8 +487,10 @@ function App() {
           departments={departments}
           onBack={openDashboardPage}
           onCreate={handleCreateDepartment}
-          onRename={handleRenameDepartment}
           onDelete={handleDeleteDepartment}
+          onGetUsage={handleGetDepartmentUsage}
+          onMerge={handleMergeDepartment}
+          onRename={handleRenameDepartment}
         />
 
         {passwordModalOpen ? (

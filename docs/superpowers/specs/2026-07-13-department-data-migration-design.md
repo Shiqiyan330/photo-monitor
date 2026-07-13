@@ -33,6 +33,8 @@ A department with associated employees, permissions, photos, thumbnails, office 
 
 The target department must differ from the source and must already exist for a merge-and-delete operation.
 
+Historical data can outlive its source entry when a rename happened before this fix. Department listing therefore includes names discovered from photo directories, office-data directories, and upload metadata. An administrator can merge such an orphaned historical department into an existing managed department even when the source is no longer present in `departments.json`.
+
 ## Backend Design
 
 ### Migration Service
@@ -40,6 +42,7 @@ The target department must differ from the source and must already exist for a m
 Add a focused department migration service. It receives the department store, employee system, photo root, thumbnail root, and office-data root. It exposes three operations:
 
 - `get_usage(department)` returns counts for employees, permissions, photos, thumbnails, each office category, and metadata records;
+- `list_departments()` combines managed, employee/permission-derived, and storage-discovered department names;
 - `rename(source, target)` transfers data and changes the managed department name;
 - `merge_and_delete(source, target)` transfers data into an existing department and removes the source.
 
@@ -95,6 +98,7 @@ Backend tests must prove:
 - employee departments and all matching matrix permissions change;
 - legacy files without metadata move;
 - merge-and-delete transfers into an existing target and removes only the source department;
+- an orphaned source found only in historical storage can be merged into an existing target;
 - direct deletion succeeds for an unused department and returns 409 with usage for a used department;
 - a destination collision is detected before mutation and leaves all source data unchanged;
 - an injected execution failure restores files and JSON snapshots.

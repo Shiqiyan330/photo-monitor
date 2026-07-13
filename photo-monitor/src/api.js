@@ -29,8 +29,11 @@ async function request(path, options = {}) {
   const payload = isJson ? await response.json() : null
 
   if (!response.ok) {
-    const error = new Error(payload?.detail ?? "Request failed")
+    const detail = payload?.detail
+    const message = typeof detail === "string" ? detail : detail?.message ?? "Request failed"
+    const error = new Error(message)
     error.status = response.status
+    error.detail = detail
     throw error
   }
 
@@ -317,6 +320,17 @@ export function createDepartment(payload) {
 export function renameDepartment(name, payload) {
   return request(`/admin/departments/${encodeURIComponent(name)}`, {
     method: "PUT",
+    body: JSON.stringify(payload),
+  })
+}
+
+export function getDepartmentUsage(name) {
+  return request(`/admin/departments/${encodeURIComponent(name)}/usage`)
+}
+
+export function mergeDepartment(name, payload) {
+  return request(`/admin/departments/${encodeURIComponent(name)}/merge`, {
+    method: "POST",
     body: JSON.stringify(payload),
   })
 }
